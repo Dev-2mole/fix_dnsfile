@@ -77,6 +77,7 @@ public:
     pcap_t* get_handle() const { return handle; }
     const u_int8_t* get_attacker_mac() const { return attacker_mac; }
     const u_int8_t* get_gateway_ip() const { return gateway_ip; }
+    const u_int8_t* get_gateway_mac() const { return gateway_mac; } // 추가된 accessor
     const std::vector<std::unique_ptr<SpoofTarget>>& get_targets() const { return targets; }
     
     // 대상별 주기적 스푸핑 시작/정지

