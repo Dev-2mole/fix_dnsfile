@@ -8,30 +8,32 @@
 #include <unistd.h>
 #include <atomic>
 
-std::atomic<bool> global_running(true);
+using namespace std;
+
+atomic<bool> global_running(true);
 
 void signal_handler(int signum) {
     if (signum == SIGINT) {
-        std::cout << "\nExiting program...\n";
+        cout << "\nExiting program...\n";
         global_running = false;
     }
 }
 
 int main(int argc, char* argv[]) {
     if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <interface> <gateway IP> <target IP1> [target IP2 ...]\n";
+        cerr << "Usage: " << argv[0] << " <interface> <gateway IP> <target IP1> [target IP2 ...]\n";
         return 1;
     }
     
-    std::string interface = argv[1];
-    std::string gateway_ip = argv[2];
+    string interface = argv[1];
+    string gateway_ip = argv[2];
     
     ArpSpoofer::enable_ip_forwarding();
-    std::signal(SIGINT, signal_handler);
+    signal(SIGINT, signal_handler);
     
     // ArpSpoofer 객체 생성 및 초기화
     ArpSpoofer* spoofer = new ArpSpoofer(interface);
-    std::atexit([](){ ArpSpoofer::disable_ip_forwarding(); });
+    atexit([](){ ArpSpoofer::disable_ip_forwarding(); });
     
     if (!spoofer->initialize()) {
         delete spoofer;
@@ -42,9 +44,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     for (int i = 3; i < argc; i++) {
-        std::string target_ip = argv[i];
+        string target_ip = argv[i];
         if (!spoofer->add_target(target_ip))
-            std::cerr << "Failed to add target " << target_ip << "\n";
+            cerr << "Failed to add target " << target_ip << "\n";
     }
     spoofer->update_filter();
     spoofer->start_spoofing_all();
@@ -53,7 +55,7 @@ int main(int argc, char* argv[]) {
     PacketForwarder forwarder(spoofer->get_handle(), spoofer);
     forwarder.start();
     
-    std::cout << "Running... (Press Ctrl+C to exit)\n";
+    cout << "Running... (Press Ctrl+C to exit)\n";
     
     while (global_running)
         sleep(1);
@@ -63,6 +65,6 @@ int main(int argc, char* argv[]) {
     delete spoofer;
     ArpSpoofer::disable_ip_forwarding();
     
-    std::cout << "Program terminated normally.\n";
+    cout << "Program terminated normally.\n";
     return 0;
 }

@@ -8,6 +8,8 @@
 #include <arpa/inet.h>
 #include <string.h>
 
+using namespace std;
+
 PacketForwarder::PacketForwarder(pcap_t* handle, const ArpSpoofer* spoofer)
     : handle(handle), spoofer(spoofer), running(false) {}
 
@@ -19,7 +21,7 @@ void PacketForwarder::start() {
     if (running)
         return;
     running = true;
-    forward_thread = std::make_unique<std::thread>(&PacketForwarder::forward_loop, this);
+    forward_thread = make_unique<thread>(&PacketForwarder::forward_loop, this);
 }
 
 void PacketForwarder::stop() {
@@ -30,7 +32,7 @@ void PacketForwarder::stop() {
 }
 
 void PacketForwarder::forward_loop() {
-    std::cout << "Packet forwarding started.\n";
+    cout << "Packet forwarding started.\n";
     struct pcap_pkthdr* header;
     const u_int8_t* packet_data;
     int res;
@@ -39,7 +41,7 @@ void PacketForwarder::forward_loop() {
         if (res == 0)
             continue;
         else if (res < 0) {
-            std::cerr << "Packet capture error: " << pcap_geterr(handle) << "\n";
+            cerr << "Packet capture error: " << pcap_geterr(handle) << "\n";
             break;
         }
         struct ether_header* eth = (struct ether_header*)packet_data;
@@ -50,7 +52,7 @@ void PacketForwarder::forward_loop() {
                 forward_packet(packet_data, header->len);
         }
     }
-    std::cout << "Packet forwarding stopped.\n";
+    cout << "Packet forwarding stopped.\n";
 }
 
 bool PacketForwarder::is_spoofed_packet(const u_int8_t* packet_data, size_t packet_len) {
@@ -113,7 +115,7 @@ void PacketForwarder::forward_packet(const u_int8_t* packet_data, size_t packet_
             u_int16_t dport = ntohs(udp->uh_dport);
             if (sport == 53 || dport == 53) {
                 if (ip_equals(src_ip, spoofer->get_gateway_ip())) {
-                    std::cout << "Dropping gateway DNS response.\n";
+                    cout << "Dropping gateway DNS response.\n";
                     delete[] new_packet;
                     return;
                 }
@@ -126,6 +128,6 @@ void PacketForwarder::forward_packet(const u_int8_t* packet_data, size_t packet_
     }
     
     if (pcap_sendpacket(handle, new_packet, packet_len) != 0)
-        std::cerr << "Failed to forward packet: " << pcap_geterr(handle) << "\n";
+        cerr << "Failed to forward packet: " << pcap_geterr(handle) << "\n";
     delete[] new_packet;
 }

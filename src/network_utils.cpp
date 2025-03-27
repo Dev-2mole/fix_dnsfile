@@ -7,20 +7,22 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+using namespace std;
+
 const u_int8_t BROADCAST_MAC[6] = {0xff,0xff,0xff,0xff,0xff,0xff};
 const u_int8_t ZERO_MAC[6] = {0,0,0,0,0,0};
 
-std::string mac_to_string(const u_int8_t* mac) {
+string mac_to_string(const u_int8_t* mac) {
     char mac_str[18];
     snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    return std::string(mac_str);
+    return string(mac_str);
 }
 
-std::string ip_to_string(const u_int8_t* ip) {
+string ip_to_string(const u_int8_t* ip) {
     char ip_str[16];
     snprintf(ip_str, sizeof(ip_str), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-    return std::string(ip_str);
+    return string(ip_str);
 }
 
 void string_to_ip(const char* ip_str, u_int8_t* ip) {
@@ -32,7 +34,7 @@ void string_to_ip(const char* ip_str, u_int8_t* ip) {
         ip[2] = (u_int8_t)c;
         ip[3] = (u_int8_t)d;
     } else {
-        std::cerr << "Invalid IP format: " << ip_str << std::endl;
+        cerr << "Invalid IP format: " << ip_str << endl;
     }
 }
 
@@ -69,17 +71,17 @@ void create_arp_packet(u_int8_t* packet, const u_int8_t* src_mac, const u_int8_t
     memcpy(arp->tpa, dst_ip, 4);
 }
 
-bool get_interface_mac(const std::string& interface_name, u_int8_t* mac) {
+bool get_interface_mac(const string& interface_name, u_int8_t* mac) {
     struct ifreq ifr;
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
-        std::cerr << "Socket creation failed" << std::endl;
+        cerr << "Socket creation failed" << endl;
         return false;
     }
     memset(&ifr, 0, sizeof(ifr));
     strncpy(ifr.ifr_name, interface_name.c_str(), IFNAMSIZ - 1);
     if (ioctl(sock, SIOCGIFHWADDR, &ifr) < 0) {
-        std::cerr << "Failed to get MAC address for " << interface_name << std::endl;
+        cerr << "Failed to get MAC address for " << interface_name << endl;
         close(sock);
         return false;
     }
@@ -88,10 +90,10 @@ bool get_interface_mac(const std::string& interface_name, u_int8_t* mac) {
     return true;
 }
 
-bool get_interface_ip(const std::string& interface_name, u_int8_t* ip) {
+bool get_interface_ip(const string& interface_name, u_int8_t* ip) {
     struct ifaddrs *ifaddr, *ifa;
     if (getifaddrs(&ifaddr) == -1) {
-        std::cerr << "Failed to get interface addresses" << std::endl;
+        cerr << "Failed to get interface addresses" << endl;
         return false;
     }
     bool found = false;
@@ -107,6 +109,6 @@ bool get_interface_ip(const std::string& interface_name, u_int8_t* ip) {
     }
     freeifaddrs(ifaddr);
     if (!found)
-        std::cerr << "Failed to get IPv4 address for " << interface_name << std::endl;
+        cerr << "Failed to get IPv4 address for " << interface_name << endl;
     return found;
 }
