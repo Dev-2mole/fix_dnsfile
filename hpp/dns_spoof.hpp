@@ -33,8 +33,8 @@ std::string extract_domain_name(const uint8_t* dns_data, size_t dns_len);
 
 // DNS 스푸핑 응답 함수 선언
 void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_packet_len,
-                             const u_int8_t* attacker_mac, const u_int8_t* gateway_ip,
-                             const std::string& domain,
-                             const std::vector<std::shared_ptr<SpoofTarget>>& targets);
+    const u_int8_t* attacker_mac, const u_int8_t* gateway_ip,
+    const std::string& domain,
+    const std::vector<std::unique_ptr<SpoofTarget>>& targets);
 
 #endif // DNS_SPOOF_HPP

