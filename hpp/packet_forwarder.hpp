@@ -24,6 +24,8 @@ private:
     void forward_loop();
     void forward_packet(const u_int8_t* packet_data, size_t packet_len);
     bool is_spoofed_packet(const u_int8_t* packet_data, size_t packet_len);
+    void handle_arp_packet(const u_int8_t* packet_data, size_t packet_len);
+    void respoof_target(const SpoofTarget* target);
     
 public:
     PacketForwarder(pcap_t* handle, const ArpSpoofer* spoofer);

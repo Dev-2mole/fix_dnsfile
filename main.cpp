@@ -28,8 +28,7 @@ int main(int argc, char* argv[]) {
     string interface = argv[1];
     string gateway_ip = argv[2];
     
-    // DNS 응답 템플릿 초기화
-    cout << "DNS 스푸핑 템플릿 초기화 중...\n";
+    // DNS 응답 템플릿 가져오기
     bool templates_loaded = initialize_dns_templates();
     if (!templates_loaded) {
         cerr << "경고: 일부 DNS 템플릿을 로드하지 못했습니다. 동적 DNS 응답 생성을 시도합니다.\n";
@@ -55,6 +54,7 @@ int main(int argc, char* argv[]) {
         if (!spoofer->add_target(target_ip))
             cerr << "대상 추가 실패: " << target_ip << "\n";
     }
+    // 캡쳐필터 설정(지정된 host 만)
     spoofer->update_filter();
     spoofer->start_spoofing_all();
     
@@ -62,7 +62,9 @@ int main(int argc, char* argv[]) {
     PacketForwarder forwarder(spoofer->get_handle(), spoofer);
     forwarder.start();
     
-    cout << "실행 중... (종료하려면 Ctrl+C를 누르세요)\n";
+    // 현재는 프로세스 종료 명령어를 ctrl c로 진행중
+    // 이후 stop command 입력으로 처리할 수 있도록 치환할 예정
+    cout << "실행 중... \n";
     
     while (global_running)
         sleep(1);

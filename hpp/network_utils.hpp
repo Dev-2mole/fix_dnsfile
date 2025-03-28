@@ -17,7 +17,8 @@ bool mac_equals(const u_int8_t* mac1, const u_int8_t* mac2);
 bool ip_equals(const u_int8_t* ip1, const u_int8_t* ip2);
 
 // IP, UDP, ARP 헤더 구조체 선언
-struct ip_header {
+struct ip_header 
+{
     u_int8_t  ip_vhl;   // 버전 및 헤더 길이
     u_int8_t  ip_tos;   // 서비스 타입
     u_int16_t ip_len;   // 전체 길이
@@ -30,23 +31,25 @@ struct ip_header {
     u_int32_t ip_dst;   // 목적지 주소
 };
 
-struct udp_header {
+struct udp_header 
+{
     u_int16_t uh_sport;
     u_int16_t uh_dport;
     u_int16_t uh_len;
     u_int16_t uh_sum;
 };
 
-struct arp_header {
-    u_int16_t htype;
-    u_int16_t ptype;
-    u_int8_t hlen;
-    u_int8_t plen;
-    u_int16_t oper;
-    u_int8_t sha[6];
-    u_int8_t spa[4];
-    u_int8_t tha[6];
-    u_int8_t tpa[4];
+struct arp_header 
+{
+    u_int16_t htype;  // Hardware Type
+    u_int16_t ptype;  // Protocol Type
+    u_int8_t hlen;    // Hardware Address Length
+    u_int8_t plen;    // Protocol Address Length
+    u_int16_t oper;   // Operation (1 for request, 2 for reply)
+    u_int8_t sha[6];  // Sender hardware address
+    u_int8_t spa[4];  // Sender protocol address
+    u_int8_t tha[6];  // Target hardware address
+    u_int8_t tpa[4];  // Target protocol address
 };
 
 // ARP 패킷 생성 함수 선언
