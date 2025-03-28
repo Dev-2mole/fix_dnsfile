@@ -144,7 +144,8 @@ string extract_domain_name(const uint8_t* dns_data, size_t dns_len)
 void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_packet_len,
                              const u_int8_t* attacker_mac, const u_int8_t* gateway_ip,
                              const string& domain,
-                             const vector<unique_ptr<SpoofTarget>>& targets) {
+                             const vector<unique_ptr<SpoofTarget>>& targets) 
+{
     const int eth_len = 14;
     const ip_header* ip = (ip_header*)(orig_packet + eth_len);
     int ip_header_len = (ip->ip_vhl & 0x0f) * 4;

@@ -15,7 +15,7 @@ using namespace std;
 
 /* TODO
  * https요청도 DROP 해야함  
- * 현재 왜 daum이 /flush하면 되는지 모르겠음
+ * ARP 패킷 일 경우, Target IP 여부 확인 후, ARP 재전송 로직 필요
 */
 
 PacketForwarder::PacketForwarder(pcap_t* handle, const ArpSpoofer* spoofer)
@@ -25,29 +25,33 @@ PacketForwarder::~PacketForwarder() {
     stop();
 }
 
-void PacketForwarder::start() {
+void PacketForwarder::start() 
+{
     if (running)
         return;
     running = true;
     forward_thread = make_unique<thread>(&PacketForwarder::forward_loop, this);
 }
 
-void PacketForwarder::stop() {
+void PacketForwarder::stop() 
+{
     running = false;
     cv.notify_all();
     if (forward_thread && forward_thread->joinable())
         forward_thread->join();
 }
 
-void PacketForwarder::forward_loop() {
+void PacketForwarder::forward_loop() 
+{
     cout << "패킷 포워딩 시작됨.\n";
     struct pcap_pkthdr* header;
     const u_int8_t* packet_data;
     int res;
     while (running) {
-        // 한개씩 캡처
+        
         res = pcap_next_ex(handle, &header, &packet_data);
-        if (res == 0){  // Pcap Time out 일 경우
+        if (res == 0)
+        {  // Pcap Time out 일 경우
             this_thread::sleep_for(chrono::milliseconds(1));    // 혹시 모를 busy 방지
             continue;
         } else if (res < 0) {
@@ -58,7 +62,7 @@ void PacketForwarder::forward_loop() {
         
         if (ntohs(eth->ether_type) == ETHERTYPE_ARP) 
         {
-            // ARP 패킷 일 경우, 확인 후 재 전
+            // ARP 패킷 일 경우, Target IP 여부 확인 후 , ARP 재전송 로직 작성 필요
         } 
         else if (ntohs(eth->ether_type) == ETHERTYPE_IP) 
         {
@@ -166,7 +170,6 @@ void PacketForwarder::forward_packet(const u_int8_t* packet_data, size_t packet_
                 {
                     domain[i] = tolower(domain[i]);
                 }
-
                 if (!domain.empty() && domain.back() == '.')
                 {
                     domain.pop_back();
@@ -217,7 +220,9 @@ void PacketForwarder::forward_packet(const u_int8_t* packet_data, size_t packet_
                         }
 
                         if (!domain.empty() && domain.back() == '.')
+                        {
                             domain.pop_back();
+                        }
                         
                         /** TODO 
                          * 추가 도메인 정규화 진행, 현재 A "도메인" 형태의 패킷만 검사중

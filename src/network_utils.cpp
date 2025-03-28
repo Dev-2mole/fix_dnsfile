@@ -73,7 +73,7 @@ void create_arp_packet(u_int8_t* packet, const u_int8_t* src_mac, const u_int8_t
     arp->ptype = htons(0x0800); // IPv4
     arp->hlen = 6;
     arp->plen = 4;
-    arp->oper = htons(oper);
+    arp->oper = htons(oper);    
     
     memcpy(arp->sha, src_mac, 6);
     memcpy(arp->spa, src_ip, 4);
@@ -81,16 +81,19 @@ void create_arp_packet(u_int8_t* packet, const u_int8_t* src_mac, const u_int8_t
     memcpy(arp->tpa, dst_ip, 4);
 }
 
-bool get_interface_mac(const string& interface_name, u_int8_t* mac) {
+bool get_interface_mac(const string& interface_name, u_int8_t* mac) 
+{
     struct ifreq ifr;
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0) {
+    if (sock < 0) 
+    {
         cerr << "Socket creation failed" << endl;
         return false;
     }
     memset(&ifr, 0, sizeof(ifr));
     strncpy(ifr.ifr_name, interface_name.c_str(), IFNAMSIZ - 1);
-    if (ioctl(sock, SIOCGIFHWADDR, &ifr) < 0) {
+    if (ioctl(sock, SIOCGIFHWADDR, &ifr) < 0) 
+    {
         cerr << "Failed to get MAC address for " << interface_name << endl;
         close(sock);
         return false;
@@ -100,17 +103,23 @@ bool get_interface_mac(const string& interface_name, u_int8_t* mac) {
     return true;
 }
 
-bool get_interface_ip(const string& interface_name, u_int8_t* ip) {
+bool get_interface_ip(const string& interface_name, u_int8_t* ip) 
+{
     struct ifaddrs *ifaddr, *ifa;
-    if (getifaddrs(&ifaddr) == -1) {
+    if (getifaddrs(&ifaddr) == -1) 
+    {
         cerr << "Failed to get interface addresses" << endl;
         return false;
     }
     bool found = false;
-    for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
+    for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) 
+    {
         if (ifa->ifa_addr == nullptr)
+        {
             continue;
-        if (ifa->ifa_addr->sa_family == AF_INET && interface_name == ifa->ifa_name) {
+        }
+        if (ifa->ifa_addr->sa_family == AF_INET && interface_name == ifa->ifa_name) 
+        {
             struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(ifa->ifa_addr);
             memcpy(ip, &addr->sin_addr, 4);
             found = true;
@@ -119,6 +128,8 @@ bool get_interface_ip(const string& interface_name, u_int8_t* ip) {
     }
     freeifaddrs(ifaddr);
     if (!found)
+    {
         cerr << "Failed to get IPv4 address for " << interface_name << endl;
+    }
     return found;
 }
