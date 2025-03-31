@@ -35,12 +35,15 @@ void string_to_ip(const char* ip_str, u_int8_t* ip)
 {
     memset(ip, 0, 4);
     unsigned int a, b, c, d;
-    if (sscanf(ip_str, "%u.%u.%u.%u", &a, &b, &c, &d) == 4) {
+    if (sscanf(ip_str, "%u.%u.%u.%u", &a, &b, &c, &d) == 4) 
+    {
         ip[0] = (u_int8_t)a;
         ip[1] = (u_int8_t)b;
         ip[2] = (u_int8_t)c;
         ip[3] = (u_int8_t)d;
-    } else {
+    } 
+    else 
+    {
         cerr << "Invalid IP format: " << ip_str << endl;
     }
 }

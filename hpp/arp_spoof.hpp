@@ -59,7 +59,6 @@ private:
     std::mutex mutex;
     
     // ARP 스푸핑 패킷 전송 및 관련 내부 함수들
-    void send_arp_spoofing_packet(const SpoofTarget* target);
     void spoof_target_thread(SpoofTarget* target);
     void send_recover_arp_packets();
     
@@ -80,6 +79,8 @@ public:
     const u_int8_t* get_gateway_mac() const { return gateway_mac; } // 추가된 accessor
     const std::vector<std::unique_ptr<SpoofTarget>>& get_targets() const { return targets; }
     
+    void send_arp_spoofing_packet(const SpoofTarget* target);
+
     // 대상별 주기적 스푸핑 시작/정지
     void start_spoofing_all();
     void stop_all();

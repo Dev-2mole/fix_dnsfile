@@ -15,7 +15,7 @@
 class PacketForwarder {
 private:
     pcap_t* handle;
-    const ArpSpoofer* spoofer; // ArpSpoofer 인스턴스에 있는 정보 사용
+    ArpSpoofer* spoofer; // ArpSpoofer 인스턴스에 있는 정보 사용
     std::atomic<bool> running;
     std::unique_ptr<std::thread> forward_thread;
     std::mutex mutex;
@@ -28,7 +28,7 @@ private:
     void respoof_target(const SpoofTarget* target);
     
 public:
-    PacketForwarder(pcap_t* handle, const ArpSpoofer* spoofer);
+    PacketForwarder(pcap_t* handle, ArpSpoofer* spoofer);
     ~PacketForwarder();
     
     void start();

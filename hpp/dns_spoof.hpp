@@ -17,13 +17,13 @@ struct dns_header {
     u_int16_t arcount;
 };
 
-// 전역 변수로 DNS 응답 템플릿 저장
-extern std::vector<uint8_t> dns_template_naver;
-extern std::vector<uint8_t> dns_template_google;
-extern std::vector<uint8_t> dns_template_daum;
+// 전역 변수로 DNS 응답 템플릿 저장 (여러 응답을 저장하도록 수정)
+extern std::vector<std::vector<uint8_t>> dns_template_naver;
+extern std::vector<std::vector<uint8_t>> dns_template_google;
+extern std::vector<std::vector<uint8_t>> dns_template_daum;
 
-// DNS 응답 템플릿 로드 함수
-bool load_dns_response_template(const char* filename, std::vector<uint8_t>& dns_response_template);
+// DNS 응답 템플릿 로드 함수 (복수 응답 지원)
+bool load_dns_response_template(const char* filename, std::vector<std::vector<uint8_t>>& templates);
 
 // 모든 DNS 템플릿 로드
 bool initialize_dns_templates();
