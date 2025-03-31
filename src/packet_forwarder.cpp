@@ -13,11 +13,6 @@ using namespace std;
 
 #define DNS_PORT 53
 
-/* TODO
- * https요청도 DROP 해야함  
- * ARP 패킷 일 경우, Target IP 여부 확인 후, ARP 재전송 로직 필요
-*/
-
 PacketForwarder::PacketForwarder(pcap_t* handle, ArpSpoofer* spoofer)
     : handle(handle), spoofer(spoofer), running(false) {}
 
@@ -82,11 +77,13 @@ void PacketForwarder::forward_loop()
 
             if (involves_gateway && involves_target) 
             {
-                cout << "[ARP 요청] 게이트웨이 <-> 타겟 간 ARP 요청 감지. 스푸핑 ARP 재전송.\n";
+                cout << "[ARP 요청] 게이트웨이 <-> 타겟 간 ARP 요청 감지. DROP & 스푸핑 ARP 재전송.\n";
                 for (const auto& target : spoofer->get_targets()) 
                 {
                     spoofer->send_arp_spoofing_packet(target.get());
                 }
+
+                continue;   // 해당 ARP 패킷 DROP
             }
         }
 
