@@ -140,6 +140,7 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
 
         ip_resp->ip_src = ip->ip_dst;
         ip_resp->ip_dst = ip->ip_src;
+        ip_resp->ip_id = htons(rand() % 65536);  // 랜덤 ID 부여
         ip_resp->ip_sum = 0;
         uint16_t* ip_words = (uint16_t*)ip_resp;
         unsigned long ip_sum = 0;
