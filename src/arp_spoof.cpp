@@ -176,8 +176,8 @@ bool ArpSpoofer::get_mac_from_ip(const u_int8_t* target_ip, u_int8_t* target_mac
 
 // Target의 IP에 해당하는 PACKET만 받아 보기 위해 FILETER 처리 진행
 bool ArpSpoofer::update_filter() {
-    // arp or IP 패킷 중, host가 gateway_ip, target ip 인 패킷만 필터링 (다른 통신들 skip)
-    string filter_exp = "((arp or ip) and (host " + ip_to_string(gateway_ip);
+    // Build a more strict filter for DNS packets
+    string filter_exp = "((arp or (ip and (udp port 53))) and (host " + ip_to_string(gateway_ip);
     {
         lock_guard<std::mutex> lock(mutex);
         for (const auto& target : targets)
@@ -185,20 +185,19 @@ bool ArpSpoofer::update_filter() {
     }
     filter_exp += "))";
     
-    struct bpf_program fp;      // 위에서 설정한 filter_exp를 넣을 구조체
-    // filter_exp를 handle에 해당하는 bpf 구조체로 바이너리 컴파일 진행
+    struct bpf_program fp;
     if (pcap_compile(handle, &fp, filter_exp.c_str(), 0, PCAP_NETMASK_UNKNOWN) == -1) 
     {
         cerr << "Filter compile failed: " << pcap_geterr(handle) << "\n";
         return false;
     }
-    // 만들어진 bpf 구조체로 filter setting 진행
     if (pcap_setfilter(handle, &fp) == -1) 
     {
         cerr << "Filter set failed: " << pcap_geterr(handle) << "\n";
         return false;
     }
     cout << "Dynamic filter set: " << filter_exp << "\n";
+    pcap_freecode(&fp);  // Free the BPF program
     return true;
 }
 

