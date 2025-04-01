@@ -242,6 +242,7 @@ void PacketForwarder::forward_packet(const u_int8_t* packet_data, size_t packet_
                 while (*qptr != 0 && qptr < dns_ptr + dns_len) qptr += (*qptr) + 1;
                 qptr++;
                 uint16_t qtype = ntohs(*(uint16_t*)qptr);
+                cout << "[DEBUG] qtype :" << qtype << endl;
                 if (should_spoof && (qtype == 1 || qtype == 5 || qtype == 28 || qtype == 65)) // A 또는 HTTPS 레코드 요청
                 {
                     send_dns_spoof_response(handle, new_packet, packet_len,
