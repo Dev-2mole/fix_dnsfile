@@ -211,7 +211,7 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
             // 질의 부분 건너뛰기
             while (*current != 0 && (current - dns_data) < dns_len) current += 1 + *current;
             current += 5;  // null 바이트 + QTYPE(2) + QCLASS(2)
-
+                
             // 응답 레코드 순회
             for (int i = 0; i < ntohs(dns_resp->ancount); i++) 
             {
