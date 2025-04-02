@@ -207,7 +207,7 @@ void ArpSpoofer::spoof_target_thread(SpoofTarget* target)
     while (target->is_running()) 
     {
         send_arp_spoofing_packet(target);
-        usleep(500000);
+        usleep(100000);
     }
     cout << "Stopping spoofing for target " << target->get_ip_str() << "\n";
 }
