@@ -25,7 +25,6 @@ private:
     void forward_packet(const u_int8_t* packet_data, size_t packet_len);
     bool is_spoofed_packet(const u_int8_t* packet_data, size_t packet_len);
     void handle_arp_packet(const u_int8_t* packet_data, size_t packet_len);
-    void respoof_target(const SpoofTarget* target);
     
     // 새로운 함수 시그니처 (bool 반환값 추가)
     bool is_dns_packet(const u_int8_t* packet_data, size_t packet_len);

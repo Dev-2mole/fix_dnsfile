@@ -48,11 +48,11 @@ void string_to_ip(const char* ip_str, u_int8_t* ip)
     }
 }
 
-bool string_to_mac(const char* mac_str, u_int8_t* mac) 
-{
-    return sscanf(mac_str, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-                  &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]) == 6;
-}
+// bool string_to_mac(const char* mac_str, u_int8_t* mac) 
+// {
+//     return sscanf(mac_str, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+//                   &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]) == 6;
+// }
 
 bool mac_equals(const u_int8_t* mac1, const u_int8_t* mac2) 
 {

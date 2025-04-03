@@ -95,36 +95,6 @@ void PacketForwarder::start()
         }
     }
     
-    // 필터 설정: ARP와 스푸핑 대상 IP에 대한 패킷만 캡처
-    struct bpf_program fp;
-    string filter_exp = "arp";
-    
-    // 대상 IP 있으면 추가
-    for (const auto& ip : target_ips) 
-    {
-        filter_exp += " or host " + ip;
-    }
-    
-    if (pcap_compile(handle, &fp, filter_exp.c_str(), 1, PCAP_NETMASK_UNKNOWN) == -1) 
-    {
-        cerr << "BPF 필터 컴파일 실패: " << pcap_geterr(handle) << endl;
-        running = false;
-        return;
-    }
-    
-    if (pcap_setfilter(handle, &fp) == -1) 
-    {
-        cerr << " BPF 필터 설정 실패: " << pcap_geterr(handle) << endl;
-        pcap_freecode(&fp);
-        running = false;
-        return;
-    }
-    
-    pcap_freecode(&fp);
-    
-    cout << "캡처 필터 설정됨: " << filter_exp << endl;
-    cout << "iptables 규칙으로 DNS 통신 차단 활성화됨" << endl;
-    
     // 패킷 처리 스레드 시작
     forward_thread = make_unique<thread>(&PacketForwarder::forward_loop, this);
     
@@ -480,10 +450,4 @@ void PacketForwarder::forward_packet(const u_int8_t* packet, size_t packet_len)
     
     // 메모리 해제
     delete[] new_packet;
-}
-
-void PacketForwarder::respoof_target(const SpoofTarget* target) 
-{
-    // 표적에 대한 ARP 스푸핑 재수행
-    spoofer->send_arp_spoofing_packet(target);
 }
