@@ -348,7 +348,6 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
             }
 
             // 패킷을 메모리에 준비했으니 이제 여러 번 전송
-            const int REPEAT_COUNT = 1;  // 전송 횟수 (한번만 해도 될듯)
             bool at_least_one_success = false;
             
             struct timespec start, end;
@@ -358,27 +357,20 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
             // 패킷 전송
             if (pcap_sendpacket(handle, packet_buffer.data(), spoof_packet_size) != 0) 
             {
-                cerr << "DNS 스푸핑 응답 전송 실패 #" << ": " << pcap_geterr(handle) << "\n";
+                cerr << "DNS 스푸핑 응답 전송 실패 #" << ": " << pcap_geterr(handle) << endl;
             } 
             else 
             {
                 at_least_one_success = true;
-                cout << "DNS 스푸핑 응답 전송 완료 " << " (" << domain << ", 타입: " << cache_entry.qtype 
-                        << ")\n";
-                }
-                
-                
-
-                usleep(1000);  // 1ms 지연
-
-
+                cout << "DNS 스푸핑 응답 전송 완료 " << " (" << domain << ", 타입: " << cache_entry.qtype << endl;
+            }
+            usleep(1000);  // 1ms 지연
             
             clock_gettime(CLOCK_MONOTONIC, &end);
             long nsec = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
             
             if (at_least_one_success) {
-                cout << "DNS 스푸핑 성공: " << REPEAT_COUNT << "개 패킷 전송 완료 (소요시간: " 
-                     << nsec/1000 << "μs)\n";
+                cout << "DNS 스푸핑 성공: " << endl;
                 return;  // 성공적으로 전송했으므로 종료
             }
         }
@@ -408,9 +400,12 @@ void send_dns_recovery_responses(pcap_t* handle,
     for (const auto& domain : recovery_domains) {
         // 해당 도메인의 템플릿이 없으면 건너뛰기
         string normalized_domain = domain;
-        for (auto& c : normalized_domain) c = tolower(c);
+        for (auto& c : normalized_domain) {
+            c = tolower(c);
+        }
         
-        if (template_cache.find(normalized_domain) == template_cache.end()) {
+        if (template_cache.find(normalized_domain) == template_cache.end()) 
+        {
             cerr << "[" << domain << "] DNS 템플릿 없음. 복구 생략.\n";
             continue;
         }
@@ -418,9 +413,11 @@ void send_dns_recovery_responses(pcap_t* handle,
         // 해당 도메인의 A 레코드 템플릿을 찾기
         bool found_template = false;
         
-        for (const auto& cache_entry : template_cache[normalized_domain]) {
+        for (const auto& cache_entry : template_cache[normalized_domain]) 
+        {
             // A 레코드(타입 1)만 사용
-            if (cache_entry.qtype == 1 && cache_entry.is_response) {
+            if (cache_entry.qtype == 1 && cache_entry.is_response) 
+            {
                 found_template = true;
                 
                 // 각 대상별로 복구 패킷 전송
@@ -485,7 +482,7 @@ void send_dns_recovery_responses(pcap_t* handle,
                         } 
                         else 
                         {
-                            cout << "NXDOMAIN 패킷 전송 성공 [" << (i+1) << "/3]: " << domain 
+                            cout << "NXDOMAIN 패킷 전송 성공 "<< domain 
                                  << " (대상: " << target->get_ip_str() << ")" << endl;
                         }
                         usleep(10000);  // 10ms 지연
@@ -498,7 +495,8 @@ void send_dns_recovery_responses(pcap_t* handle,
             }
         }
         
-        if (!found_template) {
+        if (!found_template) 
+        {
             cerr << "[" << domain << "] A 레코드 템플릿을 찾지 못했습니다. 복구 생략.\n";
         }
     }
