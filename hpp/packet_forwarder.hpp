@@ -34,6 +34,7 @@ public:
     PacketForwarder(pcap_t* handle, ArpSpoofer* spoofer);
     ~PacketForwarder();
     
+    void recover_dns();
     void start();
     void stop();
 };

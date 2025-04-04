@@ -48,5 +48,9 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
     const u_int8_t* attacker_mac, const u_int8_t* gateway_ip,
     const std::string& domain,
     const std::vector<std::unique_ptr<SpoofTarget>>& targets);
+// DNS 스푸핑 복구 함수 선언 - 짧은 TTL로 정상 응답 전송
+void send_dns_recovery_responses(pcap_t* handle, 
+    const u_int8_t* attacker_mac, const u_int8_t* gateway_ip,
+    const std::vector<std::unique_ptr<SpoofTarget>>& targets);
 
 #endif // DNS_SPOOF_HPP
