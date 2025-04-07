@@ -121,12 +121,6 @@ void PacketForwarder::forward_loop()
                 uint16_t src_port = ntohs(udp->uh_sport);
                 uint16_t dst_port = ntohs(udp->uh_dport);
                 
-                // 서버에서 온 정상 DNS 응답인 경우 드랍
-                if (src_port == DNS_PORT) {
-                    cout << "정상 DNS 응답 드랍됨\n";
-                    continue; // 이 패킷은 전송하지 않고 건너뜁니다.
-                }
-                
                 if (src_port == DNS_PORT || dst_port == DNS_PORT) {
                     if (handle_dns_packet(packet, header->len))
                         continue;
@@ -138,7 +132,7 @@ void PacketForwarder::forward_loop()
 
 bool PacketForwarder::handle_dns_packet(const uint8_t* packet, size_t packet_len) 
 {
-    // DNS 헤더 이후의 데이터 추출을 위해 Ethernet, IP, UDP 헤더 길이 계산
+    // Ethernet, IP, UDP 헤더 길이 계산
     struct ether_header* eth = (struct ether_header*)packet;
     struct ip* ip_hdr = (struct ip*)(packet + sizeof(struct ether_header));
     int ip_header_len = ip_hdr->ip_hl * 4;
@@ -150,30 +144,24 @@ bool PacketForwarder::handle_dns_packet(const uint8_t* packet, size_t packet_len
     const uint8_t* dns_data = packet + sizeof(struct ether_header) + ip_header_len + sizeof(struct udphdr);
     size_t dns_data_len = packet_len - (sizeof(struct ether_header) + ip_header_len + sizeof(struct udphdr));
     
-    // 도메인 이름 추출 (DNS 질문 섹션 기준)
+    // DNS 질문 섹션에서 도메인 이름 추출
     std::string domain = dnsSpoofer->extract_domain_name(dns_data, dns_data_len);
     if (domain.empty())
         return false;
     
-    // 지정 도메인 또는 그 서브도메인인지 판단
+    // 지정 도메인과 정확히 일치하는지 확인 (서브도메인 제외)
     bool matches = false;
     for (const auto& spoof_domain : SPOOF_DOMAINS) {
-        // 도메인이 정확히 일치하거나, 도메인의 끝부분이 ".<spoof_domain>"이면 서브도메인으로 간주
         if (domain == spoof_domain) {
-            matches = true;
-            break;
-        } else if (domain.size() > spoof_domain.size() &&
-                   domain.compare(domain.size() - spoof_domain.size(), spoof_domain.size(), spoof_domain) == 0 &&
-                   domain[domain.size() - spoof_domain.size() - 1] == '.') {
             matches = true;
             break;
         }
     }
     
     if (!matches)
-        return false; // 대상 도메인이 아니면 그대로 전달
+        return false; // 지정 도메인이 아니면 그대로 전달
     
-    // 대상 도메인에 해당하면, 요청과 응답에 따라 다르게 처리합니다.
+    // 지정 도메인에 해당하면, 요청과 응답에 따라 처리합니다.
     if (dst_port == DNS_PORT) {
         // 클라이언트에서 서버로 보내는 DNS 요청
         cout << "DNS 요청 감지: " << domain << "\n";
