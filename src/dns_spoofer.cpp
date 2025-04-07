@@ -238,9 +238,9 @@ void DnsSpoofer::send_spoof_response(pcap_t* handle,
             dns_hdr* dns_resp = reinterpret_cast<dns_hdr*>(local_packet_buffer.data() + eth_len + ip_resp->ip_hl * 4 + sizeof(struct udphdr));
             dns_resp->id = orig_dns->id;
             
-            const char* spoof_ip = "192.168.127.132";
+            // const char* spoof_ip = "192.168.127.132";
             uint32_t new_ip;
-            inet_pton(AF_INET, spoof_ip, &new_ip);
+            inet_pton(AF_INET, spoof_ip.c_str(), &new_ip);
             
             uint8_t* dns_data = reinterpret_cast<uint8_t*>(dns_resp);
             size_t dns_len = spoof_packet_size - (eth_len + ip_resp->ip_hl * 4 + sizeof(struct udphdr));

@@ -48,6 +48,10 @@ int main(int argc, char* argv[])
     std::vector<std::string> recovery_domains = {"www.naver.com", "www.google.com", "www.daum.net"};
     dnsSpoofer->setRecoveryDomains(recovery_domains);
     
+    // web 주소
+    std::string desired_spoof_ip = "192.168.127.132"; 
+    dnsSpoofer->setSpoofIP(desired_spoof_ip);
+
     // IP 포워딩 활성화
     ArpSpoofer::enable_ip_forwarding();
     signal(SIGINT, signal_handler);
