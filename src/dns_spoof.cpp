@@ -221,7 +221,7 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
     memcpy(requester_ip, &ip->ip_src, 4);
     u_int8_t requester_mac[6] = {0};
     
-    // 타겟 MAC 주소 찾기
+    // 타겟 MAC 주소 찾기w
     bool found_target = false;
     for (const auto& target : targets) 
     {
@@ -364,7 +364,7 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
                 at_least_one_success = true;
                 cout << "DNS 스푸핑 응답 전송 완료 " << " (" << domain << ", 타입: " << cache_entry.qtype << endl;
             }
-            usleep(1000);  // 1ms 지연
+            // usleep(1000);  // 1ms 지연
             
             clock_gettime(CLOCK_MONOTONIC, &end);
             long nsec = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);

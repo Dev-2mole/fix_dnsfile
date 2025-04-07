@@ -72,7 +72,7 @@ ArpSpoofer::~ArpSpoofer()
 
 bool ArpSpoofer::initialize() 
 {
-    handle = pcap_open_live(interface.c_str(), BUFSIZ, 1, 1000, errbuf);
+    handle = pcap_open_live(interface.c_str(), BUFSIZ, 1, 100, errbuf);
     if (handle == nullptr) 
     {
         cerr << "Failed to open interface: " << errbuf << endl;
