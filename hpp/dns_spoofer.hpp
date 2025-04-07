@@ -55,8 +55,13 @@ public:
                                  const uint8_t* gateway_ip,
                                  const std::vector<std::unique_ptr<SpoofTarget>>& targets);
     
+    void setRecoveryDomains(const std::vector<std::string>& domains) {
+        recovery_domains = domains;
+    }
+
 private:
     std::unordered_map<std::string, std::vector<DnsTemplateCache>> template_cache;
+    std::vector<std::string> recovery_domains;
     
     bool load_dns_response_template(const std::string& filename, std::vector<std::vector<uint8_t>>& templates);
     void cache_template_packet(const std::vector<uint8_t>& packet, const std::string& domain);

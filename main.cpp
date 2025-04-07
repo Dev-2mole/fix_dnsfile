@@ -42,8 +42,11 @@ int main(int argc, char* argv[])
     );
     if (!templates_loaded) 
     {
-        cerr << "경고: 일부 DNS 템플릿을 로드하지 못했습니다. 동적 DNS 응답 생성을 시도합니다.\n";
+        cerr << "경고: 일부 DNS 템플릿을 로드하지 못했습니다. \n";
     }
+    // recovery_domains 리스트를 main.cpp에서 관리
+    std::vector<std::string> recovery_domains = {"www.naver.com", "www.google.com", "www.daum.net"};
+    dnsSpoofer->setRecoveryDomains(recovery_domains);
     
     // IP 포워딩 활성화
     ArpSpoofer::enable_ip_forwarding();
