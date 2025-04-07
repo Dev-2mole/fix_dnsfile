@@ -10,14 +10,14 @@ TARGET = dns_hijacking
 SRCS = main.cpp \
        src/network_utils.cpp \
        src/arp_spoof.cpp \
-       src/dns_spoof.cpp \
+       src/dns_spoofer.cpp \
        src/packet_forwarder.cpp
 
 # 객체 파일 목록 (main.cpp → main.o, src/foo.cpp → src/foo.o)
 OBJS = main.o \
        src/network_utils.o \
        src/arp_spoof.o \
-       src/dns_spoof.o \
+       src/dns_spoofer.o \
        src/packet_forwarder.o
 
 .PHONY: all clean
