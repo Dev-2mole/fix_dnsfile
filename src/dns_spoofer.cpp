@@ -101,8 +101,6 @@ void DnsSpoofer::cache_template_packet(const vector<uint8_t>& packet, const stri
     }
     
     template_cache[normalized_domain].push_back(std::move(cache_entry));
-    cout << "캐시 추가: " << normalized_domain << ", 타입: " << cache_entry.qtype 
-         << ", 응답여부: " << (is_response ? "응답" : "요청") << endl;
 }
 
 bool DnsSpoofer::initialize_templates(const string& naver_path,
