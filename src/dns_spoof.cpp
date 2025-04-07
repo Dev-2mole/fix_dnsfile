@@ -198,11 +198,8 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
     }
     qptr++;  // null 바이트 건너뛰기
     uint16_t qtype = ntohs(*(uint16_t*)qptr);
-    
-    cout << "DNS 요청 레코드 타입: " << qtype << " (A=1, HTTPS=65, AAAA=28, CNAME=5), Transaction ID: 0x" 
-         << std::hex << ntohs(dns->id) << std::dec << endl;
 
-    // 도메인 검색
+    // 혹시 모를 대문자 도메인 방지용
     string normalized_domain = domain;
     for (auto& c : normalized_domain) 
     {
@@ -313,7 +310,10 @@ void send_dns_spoof_response(pcap_t* handle, u_int8_t* orig_packet, size_t orig_
             uint8_t* current = dns_data + sizeof(dns_header);
 
             // 질의 부분 건너뛰기
-            while (*current != 0 && (current - dns_data) < dns_len) current += 1 + *current;
+            while (*current != 0 && (current - dns_data) < dns_len) 
+            {
+                current += 1 + *current;
+            }
             current += 5;  // null 바이트 + QTYPE(2) + QCLASS(2)
                 
             // 응답 레코드 순회

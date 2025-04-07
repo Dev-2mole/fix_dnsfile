@@ -72,7 +72,7 @@ int main(int argc, char* argv[])
     forwarder.start();
     
     // 현재는 프로세스 종료 명령어를 ctrl c로 진행중
-    // 이후 stop command 입력으로 처리할 수 있도록 치환할 예정
+    // 이후 백그라운드 실행 처리 및 OPTION 입력으로 처리할 수 있도록 치환할 예정
     cout << "실행 중... \n";
     
     while (global_running)

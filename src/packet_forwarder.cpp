@@ -39,7 +39,8 @@ PacketForwarder::~PacketForwarder()
     stop();
 }
 
-// iptables 규칙 추가: DNS 통신 차단
+// iptables 규칙 추가: DNS 통신 차단 (PCAP을 이용한 PACKET DROP 실패로 긴급 구현)
+// 이후 raw Socket 구현으로 내용 변경 필요
 bool add_iptables_rules(const string& target_ip) 
 {
     // 기존 규칙 제거
@@ -158,7 +159,7 @@ void PacketForwarder::forward_loop()
         // 이더넷 헤더 추출
         struct ether_header* eth = (struct ether_header*)packet;
         
-        // 자신이 보낸 패킷은 처리하지 않음 (루프 방지)
+        // 제작한 패킷일 경우, SKIP
         if (mac_equals(eth->ether_shost, spoofer->get_attacker_mac())) 
         {
             continue;
@@ -251,8 +252,7 @@ bool PacketForwarder::handle_dns_packet(const u_int8_t* packet, size_t packet_le
             }
         }
 
-        cout << " DNS 요청 감지 [" << domain << ", ID: 0x" << hex << dns_id 
-        << dec << ", 클라이언트: " << ip_to_string(src_ip) << "]\n";
+        cout << " DNS 요청 감지 " << domain << ", ID: 0x" << hex << endl;
         
         if (is_target_domain) 
         {

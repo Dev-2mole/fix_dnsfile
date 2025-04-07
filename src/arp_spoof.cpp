@@ -248,6 +248,7 @@ void ArpSpoofer::send_recover_arp_packets()
 
     for (auto& target : targets) 
     {
+        // target 주소를 게이트웨이에게 정상화 전달
         u_int8_t gateway_recov_packet[sizeof(struct ether_header) + sizeof(struct arp_header)];
         create_arp_packet(gateway_recov_packet, target->get_mac(), gateway_mac, target->get_ip(), gateway_ip, 2);
         if (pcap_sendpacket(handle, gateway_recov_packet, sizeof(gateway_recov_packet)) != 0)
@@ -258,7 +259,7 @@ void ArpSpoofer::send_recover_arp_packets()
         {
             cout << "Recovery packet sent to gateway: " << target->get_ip_str() << " -> " << ip_to_string(gateway_ip) << "\n";
         }
-            
+        // 게이트웨이 주소를 target에게 정상화 전달            
         u_int8_t packet2[sizeof(struct ether_header) + sizeof(struct arp_header)];
         create_arp_packet(packet2, gateway_mac, target->get_mac(), gateway_ip, target->get_ip(), 2);
 
