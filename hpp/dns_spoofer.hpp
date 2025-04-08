@@ -10,23 +10,24 @@
 
 // DNS 헤더 구조체 정의
 struct dns_hdr {
-    uint16_t id;
-    uint16_t flags;
-    uint16_t qdcount;
-    uint16_t ancount;
-    uint16_t nscount;
-    uint16_t arcount;
+    uint16_t id;        // ID 트랜젝션
+    uint16_t flags;     // 플래그 및 응답
+    uint16_t qdcount;   // 질문 섹션 개수
+    uint16_t ancount;   // 응답 섹션 개수
+    uint16_t nscount;   // 권한 섹션 개수
+    uint16_t arcount;   // 추가 정보 섹션 개수 
 };
 
-// ARP_Spoof 코드의 클래스 가져옴
+// ARP_Spoof 코드의 클래스 가져옴 (포인터 참조용)
 class SpoofTarget;
 
 struct DnsTemplateCache {
-    std::vector<uint8_t> packet;
-    uint16_t qtype;
-    bool is_response;
+    std::vector<uint8_t> packet;    // PCAP파일에서 가져온 데이터
+    uint16_t qtype;                 // PCAP파일에서의 레코드 타입
+    bool is_response;               // DNS 응답 패킷인지 확인
 };
 
+// PCAP 템플릿 기반으로 DNS 패킷 제작 및 전송
 class DnsSpoofer {
     public:
         DnsSpoofer();

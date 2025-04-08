@@ -8,6 +8,7 @@
 #include <pcap.h>
 #include <thread>
 
+// ARP Spoofing 대상 정보 및 ARP 스레드 관리
 class SpoofTarget {
 public:
     explicit SpoofTarget(const std::string& ip_str);
@@ -29,6 +30,7 @@ private:
     std::unique_ptr<std::thread> thread_ptr;
 };
 
+// ARP Spoofing 작업 실행
 class ArpSpoofer {
 public:
     static ArpSpoofer* global_instance;
@@ -45,7 +47,7 @@ public:
     static bool enable_ip_forwarding();
     static bool disable_ip_forwarding();
     
-    // Getter functions for use by 다른 모듈
+    // 다른 모듈 호출에서 필요한 Getter functions
     const uint8_t* get_attacker_mac() const { return attacker_mac; }
     const uint8_t* get_attacker_ip() const { return attacker_ip; }
     const uint8_t* get_gateway_mac() const { return gateway_mac; }
@@ -65,11 +67,13 @@ private:
     uint8_t attacker_ip[4];
     uint8_t gateway_mac[6];
     uint8_t gateway_ip[4];
-    std::string gateway_ip_str;
+    std::string gateway_ip_str; // 초기 gateway의 IP를 문자열로 받아 이를 변환하기 위해 넣은 변수
     
+    // 스푸핑 대상 리스트
     std::vector<std::unique_ptr<SpoofTarget>> targets;
     mutable std::mutex mutex;
     
+    // ARP 스푸핑 전송 스레드
     void spoof_target_thread(SpoofTarget* target);
 
     bool get_mac_from_ip(const uint8_t* target_ip, uint8_t* target_mac);
