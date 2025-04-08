@@ -129,8 +129,12 @@ bool get_interface_ip(const string& interface_name, uint8_t* ip)
         }
     }
     freeifaddrs(ifaddr);
+
     if (!found)
+    {
         cerr << "Failed to get IPv4 address for " << interface_name << endl;
+    }
+    
     return found;
 }
 

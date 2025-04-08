@@ -42,7 +42,7 @@ int main(int argc, char* argv[])
     );
     if (!templates_loaded) 
     {
-        cerr << "경고: 일부 DNS 템플릿을 로드하지 못했습니다. \n";
+        cerr << "일부 DNS 템플릿을 로드하지 못했습니다. \n";
     }
     // recovery_domains 리스트를 main.cpp에서 관리
     vector<string> recovery_domains = {"www.naver.com", "www.google.com", "www.daum.net"};
@@ -83,7 +83,9 @@ int main(int argc, char* argv[])
     
     cout << "실행 중...\n";
     while (global_running)
+    {
         sleep(1);
+    }
     
     forwarder.stop();
     spoofer->stop_all();

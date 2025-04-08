@@ -95,7 +95,7 @@ void DnsSpoofer::cache_template_packet(const vector<uint8_t>& packet, const stri
     int ip_header_len = ip_hdr->ip_hl * 4;
     // UDP 헤더
     const struct udphdr* udp_hdr = reinterpret_cast<const struct udphdr*>(packet.data() + eth_len + ip_header_len);
-    // DNS 출발지 포트가 DNS_PORT인 경우 응답으로 간주.
+    // DNS 출발지 포트가 DNS_PORT인 경우 응답으로 지정
     bool is_response = (ntohs(udp_hdr->uh_sport) == DNS_PORT);
     
     if (!is_response) {
