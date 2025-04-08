@@ -92,7 +92,7 @@ void PacketForwarder::stop()
     // iptable이 필요할 경우 해제로직도 추가로 주석 해제 필요
     // remove_iptables_rules();
     // cout << "iptables 규칙 제거됨" << endl;
-    
+
     recover_dns();
     cout << "패킷 포워딩 시스템 종료됨" << endl;
 }
@@ -131,9 +131,15 @@ void PacketForwarder::forward_loop()
                 uint16_t src_port = ntohs(udp->uh_sport);
                 uint16_t dst_port = ntohs(udp->uh_dport);
                 
-                if (src_port == DNS_PORT || dst_port == DNS_PORT) {
-                    if (handle_dns_packet(packet, header->len))
-                        continue;
+                if (handle_dns_packet(packet, header->len)) 
+                {
+                    continue; // 스푸핑 패킷 전송이 이루어졌으므로 원본 DNS 패킷은 드랍
+                } 
+                else 
+                {
+                    // 대상 도메인에 해당하지 않으므로, DNS 패킷을 정상적으로 포워딩.
+                    forward_packet(packet, header->len);
+                    continue;
                 }
             }            
         }
