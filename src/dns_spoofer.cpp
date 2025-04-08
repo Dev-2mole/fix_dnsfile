@@ -281,7 +281,6 @@ void DnsSpoofer::send_spoof_response(pcap_t* handle,
             dns_resp->id = orig_dns->id;
             
             // 스푸핑 IP 주소 설정: main.cpp에서 setSpoofIP()를 통해 설정된 값을 사용합니다.
-            // (아래의 spoof_ip는 클래스의 멤버 변수입니다.)
             uint32_t new_ip;
             inet_pton(AF_INET, spoof_ip.c_str(), &new_ip);
             
