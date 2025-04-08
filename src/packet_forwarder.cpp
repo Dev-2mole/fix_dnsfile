@@ -177,7 +177,7 @@ bool PacketForwarder::handle_dns_packet(const uint8_t* packet, size_t packet_len
     if (!matches)
         return false; // 지정 도메인이 아니면 그대로 전달
     
-    // 지정 도메인에 해당하면, 요청과 응답에 따라 처리합니다.
+    // 지정 도메일 경우, DNS 제작 요청 및 DROP
     if (dst_port == DNS_PORT) {
         // 클라이언트에서 서버로 보내는 DNS 요청
         cout << "DNS 요청 감지: " << domain << "\n";
