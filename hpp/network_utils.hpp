@@ -6,9 +6,8 @@
 
 namespace NetworkUtils {
 
-    // C++17 inline 상수로 정의 (불가피한 경우)
-    inline const uint8_t BROADCAST_MAC[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-    inline const uint8_t ZERO_MAC[6] = {0, 0, 0, 0, 0, 0};
+    extern const uint8_t BROADCAST_MAC[6];
+    extern const uint8_t ZERO_MAC[6];
 
     std::string mac_to_string(const uint8_t* mac);
     std::string ip_to_string(const uint8_t* ip);

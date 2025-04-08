@@ -18,7 +18,7 @@ struct dns_hdr {
     uint16_t arcount;
 };
 
-// Forward declaration for SpoofTarget (defined in arp_spoof.hpp)
+// ARP_Spoof 코드의 클래스 가져옴
 class SpoofTarget;
 
 struct DnsTemplateCache {

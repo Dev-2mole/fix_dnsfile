@@ -45,11 +45,11 @@ int main(int argc, char* argv[])
         cerr << "경고: 일부 DNS 템플릿을 로드하지 못했습니다. \n";
     }
     // recovery_domains 리스트를 main.cpp에서 관리
-    std::vector<std::string> recovery_domains = {"www.naver.com", "www.google.com", "www.daum.net"};
+    vector<string> recovery_domains = {"www.naver.com", "www.google.com", "www.daum.net"};
     dnsSpoofer->setRecoveryDomains(recovery_domains);
     
     // web 주소
-    std::string desired_spoof_ip = "192.168.127.132"; 
+    string desired_spoof_ip = "192.168.127.132"; 
     dnsSpoofer->setSpoofIP(desired_spoof_ip);
 
     // IP 포워딩 활성화

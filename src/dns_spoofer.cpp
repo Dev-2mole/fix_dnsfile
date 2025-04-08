@@ -13,7 +13,7 @@
 #include <cctype>
 #include <netinet/ip.h>
 #include <netinet/udp.h>
-#include <netinet/if_ether.h> // 또는 <net/ethernet.h> (시스템에 따라 다름)
+#include <netinet/if_ether.h>
 
 
 using namespace std;
@@ -30,7 +30,7 @@ DnsSpoofer::~DnsSpoofer()
 {
 }
 
-bool DnsSpoofer::load_dns_response_template(const std::string& filename, vector<vector<uint8_t>>& templates) 
+bool DnsSpoofer::load_dns_response_template(const string& filename, vector<vector<uint8_t>>& templates) 
 {
     char errbuf[PCAP_ERRBUF_SIZE];
     pcap_t* pcap_handle = pcap_open_offline(filename.c_str(), errbuf);
@@ -100,7 +100,7 @@ void DnsSpoofer::cache_template_packet(const vector<uint8_t>& packet, const stri
         c = tolower(c);
     }
     
-    template_cache[normalized_domain].push_back(std::move(cache_entry));
+    template_cache[normalized_domain].push_back(move(cache_entry));
 }
 
 bool DnsSpoofer::initialize_templates(const string& naver_path,
@@ -150,7 +150,7 @@ void DnsSpoofer::send_spoof_response(pcap_t* handle,
                                       size_t orig_packet_len,
                                       const uint8_t* attacker_mac,
                                       const uint8_t* gateway_ip,
-                                      const std::string& domain,
+                                      const string& domain,
                                       const vector<unique_ptr<SpoofTarget>>& targets)
 {
     const int eth_len = 14;
@@ -281,9 +281,8 @@ void DnsSpoofer::send_recovery_responses(pcap_t* handle,
                                           const uint8_t* gateway_ip,
                                           const vector<unique_ptr<SpoofTarget>>& targets)
 {
-    cout << "DNS 스푸핑 복구 시작 (NXDOMAIN 패킷 + 정상 IP 패킷)..." << endl;
+    cout << "DNS 스푸핑 복구 시작 NXDOMAIN 패킷..." << endl;
 
-    
     for (const auto& domain : recovery_domains) {
         string normalized_domain = domain;
         for (auto &c : normalized_domain) {
@@ -312,6 +311,10 @@ void DnsSpoofer::send_recovery_responses(pcap_t* handle,
                     int ip_header_len = ip_nx->ip_hl * 4;
                     memcpy(&ip_nx->ip_src, gateway_ip, 4);
                     memcpy(&ip_nx->ip_dst, target->get_ip(), 4);
+                    
+                    // TTL 값을 0으로 설정
+                    ip_nx->ip_ttl = 0;
+                    
                     ip_nx->ip_id = htons(rand() % 65536);
                     ip_nx->ip_sum = 0;
                     uint16_t* ip_words = reinterpret_cast<uint16_t*>(ip_nx);
@@ -349,3 +352,4 @@ void DnsSpoofer::send_recovery_responses(pcap_t* handle,
     }
     cout << "DNS 스푸핑 복구 패킷 전송 완료" << endl;
 }
+

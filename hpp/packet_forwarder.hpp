@@ -8,7 +8,7 @@
 #include <condition_variable>
 #include "arp_spoof.hpp"
 
-// Forward declaration of DnsSpoofer
+// DNS_Spoofer 코드의 클래스 포워드
 class DnsSpoofer;
 
 class PacketForwarder {
