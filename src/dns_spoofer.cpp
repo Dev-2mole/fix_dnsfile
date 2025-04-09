@@ -353,7 +353,7 @@ void DnsSpoofer::send_recovery_responses(pcap_t* handle,
     cout << "DNS 스푸핑 복구 패킷 전송 완료" << endl;
 }
 
-// 새로운 함수: 직접 NXDOMAIN 패킷 생성
+// 직접 NXDOMAIN 패킷 생성
 void DnsSpoofer::create_and_send_nxdomain_packet(pcap_t* handle,
                                                const uint8_t* src_mac,
                                                const uint8_t* dst_mac,
